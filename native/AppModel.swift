@@ -24,11 +24,17 @@ final class AppModel: ObservableObject {
     @Published var headStrength = 90
     @Published var headScale = 100
     @Published var headOffsetY = 0
-    @Published var captureDirectory: URL = AppModel.defaultCaptureDirectory()
+    @Published var captureDirectory: URL = AppModel.defaultCaptureDirectory() {
+        didSet {
+            UserDefaults.standard.set(captureDirectory.path, forKey: "lf_capture_dir")
+            refreshRecentCaptures()
+        }
+    }
     @Published var isRecording = false
     @Published var recordingWithAudio = false
     @Published var recordSeconds = 0
     @Published var lastCaptureURL: URL?
+    @Published var recentCaptures: [CaptureItem] = []
     @Published var transientMessage: String?
     @Published var delayMs: Double = 0 {
         didSet {
@@ -95,6 +101,7 @@ final class AppModel: ObservableObject {
         }
         wireCamera()
         observeBackend()
+        refreshRecentCaptures()
     }
 
     // MARK: - 服务
@@ -371,6 +378,29 @@ final class AppModel: ObservableObject {
         backend.setHeadParameters(offsetY: v)
     }
 
+    func applyHeadPreset(_ preset: HeadPreset) {
+        let values: (Int, Int, Int)
+        let name: String
+        switch preset {
+        case .natural:
+            values = (70, 98, 0)
+            name = "自然"
+        case .balanced:
+            values = (90, 100, 0)
+            name = "均衡"
+        case .strong:
+            values = (100, 104, 0)
+            name = "明显"
+        }
+        headStrength = values.0
+        headScale = values.1
+        headOffsetY = values.2
+        backend.setHeadParameters(
+            strength: values.0, scale: values.1, offsetY: values.2
+        )
+        flash("换头预设：\(name)")
+    }
+
     /// 点击画面中的脸：x/y 为相对画面内容的 0–1 坐标。
     func selectTarget(x: Double, y: Double) {
         backend.selectTarget(x: x, y: y) { [weak self] ok, error in
@@ -434,6 +464,40 @@ final class AppModel: ObservableObject {
         NSWorkspace.shared.open(captureDirectory)
     }
 
+    func refreshRecentCaptures() {
+        let fm = FileManager.default
+        guard let urls = try? fm.contentsOfDirectory(
+            at: captureDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            recentCaptures = []
+            return
+        }
+        let items: [CaptureItem] = urls.compactMap { url in
+            let ext = url.pathExtension.lowercased()
+            guard url.lastPathComponent.hasPrefix("LiveFace_"),
+                  ext == "png" || ext == "mp4" else { return nil }
+            let values = try? url.resourceValues(
+                forKeys: [.contentModificationDateKey, .fileSizeKey]
+            )
+            return CaptureItem(
+                url: url,
+                date: values?.contentModificationDate ?? .distantPast,
+                size: Int64(values?.fileSize ?? 0)
+            )
+        }
+        recentCaptures = Array(items.sorted { $0.date > $1.date }.prefix(5))
+    }
+
+    func openCapture(_ item: CaptureItem) {
+        NSWorkspace.shared.open(item.url)
+    }
+
+    func revealCapture(_ item: CaptureItem) {
+        NSWorkspace.shared.activateFileViewerSelecting([item.url])
+    }
+
     func captureScreenshot() {
         guard let image = displayedImage else {
             alertMessage = "还没有换脸画面，请先开始直播。"
@@ -442,6 +506,7 @@ final class AppModel: ObservableObject {
         do {
             let url = try MediaCapture.saveScreenshot(image, in: captureDirectory)
             lastCaptureURL = url
+            refreshRecentCaptures()
             flash("已保存截图：\(url.lastPathComponent)")
         } catch {
             alertMessage = error.localizedDescription
@@ -518,6 +583,7 @@ final class AppModel: ObservableObject {
             switch result {
             case .success(let url):
                 self.lastCaptureURL = url
+                self.refreshRecentCaptures()
                 self.flash("已保存视频：\(url.lastPathComponent)")
             case .failure(let error):
                 self.alertMessage = error.localizedDescription
@@ -572,6 +638,37 @@ final class AppModel: ObservableObject {
             }
             return event
         }
+    }
+}
+
+// MARK: - 最近文件
+
+struct CaptureItem: Identifiable {
+    let url: URL
+    let date: Date
+    let size: Int64
+
+    var id: URL { url }
+    var name: String { url.lastPathComponent }
+    var isVideo: Bool { url.pathExtension.lowercased() == "mp4" }
+
+    var sizeText: String {
+        ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+    }
+
+    var dateText: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "MM-dd HH:mm"
+        return formatter.string(from: date)
+    }
+}
+
+extension AppModel {
+    enum HeadPreset {
+        case natural
+        case balanced
+        case strong
     }
 }
 

@@ -349,6 +349,18 @@ private struct SidebarView: View {
             if model.headSwap {
                 VStack(spacing: 7) {
                     HStack {
+                        Text("预设").font(.system(size: 12))
+                        Spacer()
+                        Menu("应用预设") {
+                            Button("自然（弱）") { model.applyHeadPreset(.natural) }
+                            Button("均衡（默认）") { model.applyHeadPreset(.balanced) }
+                            Button("明显（强）") { model.applyHeadPreset(.strong) }
+                        }
+                        .menuStyle(.borderlessButton)
+                        .frame(width: 124)
+                    }
+
+                    HStack {
                         Text("换头强度").font(.system(size: 12))
                         Spacer()
                         Text("\(model.headStrength)%")
@@ -510,6 +522,59 @@ private struct SidebarView: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if !model.recentCaptures.isEmpty {
+                Divider()
+                    .overlay(Color.white.opacity(0.07))
+
+                HStack {
+                    Text("最近文件")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("刷新") { model.refreshRecentCaptures() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.accent)
+                }
+
+                ForEach(Array(model.recentCaptures.prefix(3))) { item in
+                    HStack(spacing: 8) {
+                        Image(systemName: item.isVideo ? "film" : "photo")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.accent)
+                            .frame(width: 16)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(item.name)
+                                .font(.system(size: 10))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Text("\(item.dateText) · \(item.sizeText)")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer(minLength: 4)
+
+                        Button {
+                            model.openCapture(item)
+                        } label: {
+                            Image(systemName: "arrow.up.right.square")
+                        }
+                        .buttonStyle(.plain)
+                        .help("打开")
+
+                        Button {
+                            model.revealCapture(item)
+                        } label: {
+                            Image(systemName: "folder")
+                        }
+                        .buttonStyle(.plain)
+                        .help("在 Finder 中显示")
+                    }
+                }
+            }
         }
         .cardStyle()
     }
