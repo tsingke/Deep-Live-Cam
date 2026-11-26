@@ -32,6 +32,7 @@ final class AppModel: ObservableObject {
     }
     @Published var isRecording = false
     @Published var recordingWithAudio = false
+    @Published var micLevel: Float = 0
     @Published var recordSeconds = 0
     @Published var lastCaptureURL: URL?
     @Published var recentCaptures: [CaptureItem] = []
@@ -99,6 +100,12 @@ final class AppModel: ObservableObject {
                 self.mediaCapture.appendAudio(sampleBuffer)
             }
         }
+        audioCapture.onLevel = { [weak self] level in
+            DispatchQueue.main.async {
+                guard let self, self.isRecording else { return }
+                self.micLevel = level
+            }
+        }
         wireCamera()
         observeBackend()
         refreshRecentCaptures()
@@ -122,6 +129,7 @@ final class AppModel: ObservableObject {
     func shutdown() {
         camera.stop()
         audioCapture.stop()
+        micLevel = 0
         if isRecording {
             isRecording = false
             recordingWithAudio = false
@@ -543,6 +551,7 @@ final class AppModel: ObservableObject {
                 )
                 self.recordingWithAudio = withAudio
                 self.isRecording = true
+                self.micLevel = 0
                 self.recordStartedAt = Date()
                 self.recordSeconds = 0
                 self.lastCaptureURL = url
@@ -576,6 +585,7 @@ final class AppModel: ObservableObject {
         guard isRecording else { return }
         isRecording = false
         recordingWithAudio = false
+        micLevel = 0
         recordStartedAt = nil
         audioCapture.stop()
         mediaCapture.finish { [weak self] result in

@@ -756,6 +756,8 @@ private struct PreviewPane: View {
                 .padding(.vertical, 3)
                 .background(Capsule().fill(Theme.danger.opacity(0.12)))
                 .overlay(Capsule().stroke(Theme.danger.opacity(0.35), lineWidth: 1))
+
+                MicLevelIndicator(level: model.micLevel, active: model.recordingWithAudio)
             }
 
             Spacer()
@@ -1193,6 +1195,36 @@ private struct UploadTile: View {
         }
         .buttonStyle(.plain)
         .onHover { ui.uploadHover = $0 }
+    }
+}
+
+private struct MicLevelIndicator: View {
+    let level: Float
+    let active: Bool
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: active ? "mic.fill" : "mic.slash.fill")
+                .font(.system(size: 9))
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.12))
+                    Capsule()
+                        .fill(barColor)
+                        .frame(width: max(2, geo.size.width * CGFloat(min(1, max(0, level)))))
+                }
+            }
+            .frame(width: 42, height: 4)
+        }
+        .foregroundStyle(active ? Color.green : Color.secondary)
+        .help(active ? "麦克风电平" : "未启用麦克风")
+    }
+
+    private var barColor: Color {
+        if !active { return .gray }
+        if level > 0.85 { return Theme.danger }
+        if level > 0.6 { return .yellow }
+        return .green
     }
 }
 

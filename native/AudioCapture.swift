@@ -1,5 +1,7 @@
 import Foundation
 import AVFoundation
+import CoreAudio
+import QuartzCore
 
 /// 只在本地录制期间采集麦克风；不录制时完全停止，避免麦克风常驻。
 final class AudioCaptureController: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
@@ -9,6 +11,9 @@ final class AudioCaptureController: NSObject, AVCaptureAudioDataOutputSampleBuff
     private var audioOutput: AVCaptureAudioDataOutput?
 
     var onSample: ((CMSampleBuffer) -> Void)?
+    var onLevel: ((Float) -> Void)?
+
+    private var lastLevelAt: Double = 0
 
     func start(completion: @escaping (Bool) -> Void) {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -75,6 +80,67 @@ final class AudioCaptureController: NSObject, AVCaptureAudioDataOutputSampleBuff
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
+        let now = CACurrentMediaTime()
+        if now - lastLevelAt > 0.05, let level = Self.audioLevel(from: sampleBuffer) {
+            lastLevelAt = now
+            onLevel?(level)
+        }
         onSample?(sampleBuffer)
+    }
+
+    /// 0..1 的 RMS 电平，够驱动一个轻量电平表；不用于音频分析。
+    static func audioLevel(from sampleBuffer: CMSampleBuffer) -> Float? {
+        guard let format = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let asbdPtr = CMAudioFormatDescriptionGetStreamBasicDescription(format),
+              let block = CMSampleBufferGetDataBuffer(sampleBuffer) else {
+            return nil
+        }
+        let asbd = asbdPtr.pointee
+        let isFloat = (asbd.mFormatFlags & kAudioFormatFlagIsFloat) != 0
+        let bits = Int(asbd.mBitsPerChannel)
+        let channels = max(1, Int(asbd.mChannelsPerFrame))
+        let bytesPerSample = max(1, bits / 8)
+        let frames = CMSampleBufferGetNumSamples(sampleBuffer)
+        guard frames > 0 else { return nil }
+
+        var lengthAtOffset = 0
+        var totalLength = 0
+        var dataPtr: UnsafeMutablePointer<Int8>?
+        guard CMBlockBufferGetDataPointer(
+            block, atOffset: 0,
+            lengthAtOffsetOut: &lengthAtOffset,
+            totalLengthOut: &totalLength,
+            dataPointerOut: &dataPtr
+        ) == noErr, let dataPtr else { return nil }
+
+        let available = min(totalLength, frames * channels * bytesPerSample)
+        let count = available / bytesPerSample
+        guard count > 0 else { return nil }
+
+        var sum = 0.0
+        if isFloat {
+            let p = UnsafeRawPointer(dataPtr).assumingMemoryBound(to: Float.self)
+            for i in 0..<count {
+                let v = Double(p[i])
+                sum += v * v
+            }
+        } else if bits == 16 {
+            let p = UnsafeRawPointer(dataPtr).assumingMemoryBound(to: Int16.self)
+            for i in 0..<count {
+                let v = Double(p[i]) / 32768.0
+                sum += v * v
+            }
+        } else if bits == 32 {
+            let p = UnsafeRawPointer(dataPtr).assumingMemoryBound(to: Int32.self)
+            for i in 0..<count {
+                let v = Double(p[i]) / 2147483648.0
+                sum += v * v
+            }
+        } else {
+            return nil
+        }
+
+        let rms = sqrt(sum / Double(count))
+        return Float(min(1.0, max(0.0, rms * 8.0)))
     }
 }
