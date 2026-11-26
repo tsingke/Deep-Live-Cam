@@ -11,6 +11,7 @@ struct ServerSettings: Codable {
     var detect_interval: Int
     var jpeg_quality: Int
     var swap_count: Int
+    var head_swap: Bool?
 }
 
 struct WarmupInfo: Codable {

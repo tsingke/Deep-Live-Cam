@@ -122,6 +122,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         output.keyEquivalentModifierMask = [.command, .shift]
         output.target = self
+
+        liveMenu.addItem(.separator())
+        let screenshot = liveMenu.addItem(
+            withTitle: "截图",
+            action: #selector(captureScreenshot),
+            keyEquivalent: "s"
+        )
+        screenshot.keyEquivalentModifierMask = [.command]
+        screenshot.target = self
+
+        let record = liveMenu.addItem(
+            withTitle: "开始 / 停止录制",
+            action: #selector(toggleRecording),
+            keyEquivalent: "r"
+        )
+        record.keyEquivalentModifierMask = [.command]
+        record.target = self
+
+        liveMenu.addItem(.separator())
+        let chooseDir = liveMenu.addItem(
+            withTitle: "选择保存目录…",
+            action: #selector(chooseCaptureDirectory),
+            keyEquivalent: ""
+        )
+        chooseDir.target = self
+
         liveItem.submenu = liveMenu
 
         NSApp.mainMenu = mainMenu
@@ -133,6 +159,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showOutput() {
         model.showOutputWindow()
+    }
+
+    @objc private func captureScreenshot() {
+        model.captureScreenshot()
+    }
+
+    @objc private func toggleRecording() {
+        model.toggleRecording()
+    }
+
+    @objc private func chooseCaptureDirectory() {
+        model.chooseCaptureDirectory()
     }
 
     @objc private func quitApp() {

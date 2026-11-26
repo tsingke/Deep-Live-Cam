@@ -95,6 +95,7 @@ g.det_size = 640
 
 DEFAULT_DETECT_INTERVAL = 3
 DEFAULT_JPEG_QUALITY = 85
+DEFAULT_HEAD_SWAP = False
 MAX_FRAME_BYTES = 8 * 1024 * 1024
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_WORKERS = 2               # 同时处理的最大帧数
@@ -197,6 +198,7 @@ class Engine:
         self._src_lock = threading.RLock()
 
         self._detect_lock = threading.Lock()   # 串行化 insightface 调用
+        self._head_lock = threading.Lock()     # 懒构建源照片头部遮罩
         self._state_lock = threading.Lock()
         self._stats_lock = threading.Lock()
         self.recent: Deque[Dict[str, float]] = deque(maxlen=300)
@@ -207,6 +209,7 @@ class Engine:
         self.detect_interval = DEFAULT_DETECT_INTERVAL
         self.jpeg_quality = DEFAULT_JPEG_QUALITY
         self.swap_count = 1  # 1/2/3 = 人数，0 = 全部
+        self.head_swap = DEFAULT_HEAD_SWAP  # 实验性：换脸后叠加源头部/发型
         self.detect_warm_ms: Optional[float] = None
         self.swap_warm_ms: Optional[float] = None
         self._swap_warming = threading.Event()
@@ -273,6 +276,10 @@ class Engine:
 
             self.set_status("ready", "就绪")
             self.ready.set()
+
+            # 提前加载 Vision 人像分割（换头用），避免用户第一次切到
+            # 「换头」时卡在模型初始化上；失败则静默回退到 GrabCut。
+            threading.Thread(target=self._warm_vision, daemon=True).start()
 
             if self.sources:
                 self.start_swap_warmup()
@@ -400,6 +407,8 @@ class Engine:
         self._save_library()
 
         log.info("新增照片 %s (%s)", name, pid)
+        if self.head_swap:
+            threading.Thread(target=self._head_assets, args=(item,), daemon=True).start()
         if not self._swap_warmed and not self._warm_started:
             self.start_swap_warmup()
         return self.public_photo(item), None
@@ -421,7 +430,10 @@ class Engine:
             if pid not in self.sources:
                 return False
             self.active_id = pid
+            item = self.sources[pid]
         self._save_library()
+        if self.head_swap:
+            threading.Thread(target=self._head_assets, args=(item,), daemon=True).start()
         return True
 
     def delete(self, pid: str) -> bool:
@@ -439,12 +451,49 @@ class Engine:
         self._save_library()
         return True
 
-    def active_face(self):
+    def active_source_item(self) -> Optional[Dict[str, Any]]:
         with self._src_lock:
-            item = self.sources.get(self.active_id) if self.active_id else None
-            return item["face"] if item else None
+            return self.sources.get(self.active_id) if self.active_id else None
+
+    def active_face(self):
+        item = self.active_source_item()
+        return item["face"] if item else None
+
+    def _head_assets(self, item: Optional[Dict[str, Any]]):
+        """懒构建并缓存当前源照片的头部图/软遮罩/五点关键点。"""
+        if item is None:
+            return None
+        cached = item.get("head_assets")
+        if cached is not None:
+            return cached
+        with self._head_lock:
+            cached = item.get("head_assets")
+            if cached is not None:
+                return cached
+            from head_swap import build_source_head_assets
+
+            img = _read_image(item["path"])
+            if img is None:
+                return None
+            assets = build_source_head_assets(img, item["face"])
+            if assets is None:
+                log.warning("换头：无法从 %s 提取头部遮罩", item.get("name"))
+                return None
+            item["head_assets"] = assets
+            log.info("换头：已为 %s 构建头部遮罩", item.get("name"))
+            return assets
 
     # ---- warm-up ----------------------------------------------------------
+    def _warm_vision(self) -> None:
+        try:
+            from head_swap import _vision_person_mask
+
+            with self._head_lock:
+                _vision_person_mask(np.zeros((64, 64, 3), dtype=np.uint8))
+            log.info("Vision 人像分割已预热")
+        except Exception:
+            pass
+
     def start_swap_warmup(self) -> None:
         if self._warm_started or self._swap_warmed:
             return
@@ -704,13 +753,26 @@ class Engine:
         t_swap0 = time.perf_counter()
         swapped = False
         out = img
-        src = self.active_face()
+        src_item = self.active_source_item()
+        src = src_item["face"] if src_item else None
         if src is not None and targets:
             from modules.processors.frame.face_swapper import swap_face
 
             for target_face in targets:
                 out = swap_face(src, target_face, out)
             swapped = True
+            if self.head_swap:
+                try:
+                    from head_swap import apply_head_transfer
+
+                    assets = self._head_assets(src_item)
+                    if assets is not None:
+                        for target_face in targets:
+                            out = apply_head_transfer(
+                                out, assets[0], assets[1], assets[2], target_face
+                            )
+                except Exception:
+                    log.exception("换头融合失败（本帧保留换脸结果）")
         swap_ms = (time.perf_counter() - t_swap0) * 1000
 
         t_enc = time.perf_counter()
@@ -918,6 +980,7 @@ async def api_state(request) -> Any:
             "detect_interval": eng.detect_interval,
             "jpeg_quality": eng.jpeg_quality,
             "swap_count": eng.swap_count,
+            "head_swap": bool(eng.head_swap),
         },
         "warmup": {
             "detect_ms": round(eng.detect_warm_ms, 1) if eng.detect_warm_ms else None,
@@ -1034,12 +1097,24 @@ async def api_config(request) -> Any:
                         session_state.faces = []
         except Exception:
             pass
+    if "head_swap" in body:
+        try:
+            eng.head_swap = bool(body["head_swap"])
+            if eng.head_swap:
+                item = eng.active_source_item()
+                if item is not None:
+                    threading.Thread(
+                        target=eng._head_assets, args=(item,), daemon=True
+                    ).start()
+        except Exception:
+            pass
     _save_json(
         CONFIG_FILE,
         {
             "detect_interval": eng.detect_interval,
             "jpeg_quality": eng.jpeg_quality,
             "swap_count": eng.swap_count,
+            "head_swap": bool(eng.head_swap),
         },
     )
     request.app["last_activity"] = time.time()
@@ -1049,6 +1124,7 @@ async def api_config(request) -> Any:
             "detect_interval": eng.detect_interval,
             "jpeg_quality": eng.jpeg_quality,
             "swap_count": eng.swap_count,
+            "head_swap": bool(eng.head_swap),
         }
     )
 
@@ -1217,6 +1293,7 @@ def create_app(idle_timeout: int = 7200) -> Any:
     eng.detect_interval = int(cfg.get("detect_interval", DEFAULT_DETECT_INTERVAL))
     eng.jpeg_quality = int(cfg.get("jpeg_quality", DEFAULT_JPEG_QUALITY))
     eng.swap_count = max(0, min(6, int(cfg.get("swap_count", 1))))
+    eng.head_swap = bool(cfg.get("head_swap", DEFAULT_HEAD_SWAP))
 
     # 帧请求约 100–400KB；上传是多文件 multipart，单独限制每个文件 20MB。
     app = web.Application(client_max_size=128 * 1024 * 1024)

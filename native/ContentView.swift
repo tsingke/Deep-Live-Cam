@@ -159,6 +159,7 @@ private struct SidebarView: View {
                     controlsSection
                     statsSection
                     obsSection
+                    captureSection
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 26)
@@ -322,6 +323,29 @@ private struct SidebarView: View {
                 .frame(width: 124)
             }
 
+            HStack {
+                Text("模式").font(.system(size: 12))
+                Spacer()
+                Picker(
+                    "",
+                    selection: Binding(
+                        get: { model.headSwap },
+                        set: { model.setHeadSwap($0) }
+                    )
+                ) {
+                    Text("换脸（仅面部）").tag(false)
+                    Text("换头（实验）").tag(true)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 124)
+            }
+
+            Text("换头会叠加源照片的发型/头部轮廓，保留目标表情；建议正脸、半身照。")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             HStack(alignment: .firstTextBaseline) {
                 Text("点击画面中的人脸可锁定主角")
                     .font(.system(size: 10.5))
@@ -334,6 +358,91 @@ private struct SidebarView: View {
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(Theme.accent)
             }
+        }
+        .cardStyle()
+    }
+
+    private var captureSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text("截图与录制")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                if model.isRecording {
+                    HStack(spacing: 5) {
+                        Circle().fill(Theme.danger).frame(width: 6, height: 6)
+                        Text("REC \(model.recordTimeText)")
+                            .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(Theme.danger)
+                    }
+                } else {
+                    Text("本地保存")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack {
+                Text("保存到")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("选择…") {
+                    model.chooseCaptureDirectory()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(Theme.accent)
+            }
+
+            Text(model.captureDirectoryDisplay)
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(model.captureDirectory.path)
+
+            HStack(spacing: 8) {
+                Button {
+                    model.captureScreenshot()
+                } label: {
+                    Label("截图", systemImage: "camera")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    model.toggleRecording()
+                } label: {
+                    Label(
+                        model.isRecording ? "停止" : "录制",
+                        systemImage: model.isRecording ? "stop.fill" : "record.circle"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(model.isRecording ? Theme.danger : Theme.accent)
+            }
+            .controlSize(.regular)
+
+            HStack {
+                Button("打开目录") {
+                    model.openCaptureDirectory()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(Theme.accent)
+
+                Spacer()
+
+                Text(model.isRecording ? "H.264 · 无音频" : "PNG · MP4（H.264）")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("录制换脸后的干净画面，不含界面控件。")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
         }
         .cardStyle()
     }
@@ -504,7 +613,55 @@ private struct PreviewPane: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
 
+            if model.isRecording {
+                HStack(spacing: 5) {
+                    Circle().fill(Theme.danger).frame(width: 6, height: 6)
+                    Text("REC \(model.recordTimeText)")
+                        .font(.system(size: 9, weight: .bold).monospacedDigit())
+                        .foregroundStyle(Theme.danger)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Theme.danger.opacity(0.12)))
+                .overlay(Capsule().stroke(Theme.danger.opacity(0.35), lineWidth: 1))
+            }
+
             Spacer()
+
+            Button {
+                model.captureScreenshot()
+            } label: {
+                Label("截图", systemImage: "camera")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("保存当前换脸画面为 PNG（⌘S）")
+
+            Button {
+                model.toggleRecording()
+            } label: {
+                Label(
+                    model.isRecording ? "停止" : "录制",
+                    systemImage: model.isRecording ? "stop.fill" : "record.circle"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(model.isRecording ? Theme.danger : Theme.accent)
+            .help(model.isRecording ? "停止并保存 H.264 视频（⌘R）" : "录制换脸后的干净画面（⌘R）")
+
+            Button {
+                model.chooseCaptureDirectory()
+            } label: {
+                Image(systemName: "folder")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("选择截图 / 录制的保存目录")
+
+            Divider()
+                .frame(height: 18)
+                .overlay(Color.white.opacity(0.12))
 
             MetricChip(label: "FPS", value: String(format: "%.1f", model.fps))
             MetricChip(label: "延迟", value: model.latencyMs.map { "\(Int($0)) ms" } ?? "–")
@@ -657,7 +814,7 @@ private struct PreviewPane: View {
             footerItem("固定延迟", "\(Int(model.delayMs)) ms")
             footerItem("当前人物", activePhotoName)
             Spacer()
-            Text("空格 开始/停止 · 1–9 换人")
+            Text("空格 开始/停止 · 1–9 换人 · ⌘S 截图 · ⌘R 录制")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
         }

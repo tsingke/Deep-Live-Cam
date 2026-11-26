@@ -266,6 +266,10 @@ final class BackendClient: ObservableObject {
         postJSON("api/config", ["swap_count": value])
     }
 
+    func setHeadSwap(_ value: Bool) {
+        postJSON("api/config", ["head_swap": value])
+    }
+
     func selectTarget(x: Double, y: Double, completion: @escaping (Bool, String?) -> Void) {
         var comps = URLComponents(
             url: BackendClient.baseURL.appendingPathComponent("api/target"),

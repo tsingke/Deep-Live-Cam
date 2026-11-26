@@ -20,6 +20,11 @@ final class AppModel: ObservableObject {
     @Published var cameraPermissionIssue = false
     @Published var detectInterval = 3
     @Published var swapCount = 1
+    @Published var headSwap = false
+    @Published var captureDirectory: URL = AppModel.defaultCaptureDirectory()
+    @Published var isRecording = false
+    @Published var recordSeconds = 0
+    @Published var lastCaptureURL: URL?
     @Published var transientMessage: String?
     @Published var delayMs: Double = 0 {
         didSet {
@@ -47,8 +52,20 @@ final class AppModel: ObservableObject {
     private var demoAutoStarted = false
     private var cameraAutoStarted = false
     private var toastWorkItem: DispatchWorkItem?
+    private var headSwapDirty = false
+    private let mediaCapture = MediaCapture()
+    private var recordStartedAt: Date?
 
     var isDemo: Bool { camera.isDemo }
+
+    static func defaultCaptureDirectory() -> URL {
+        let fm = FileManager.default
+        if let movies = fm.urls(for: .moviesDirectory, in: .userDomainMask).first {
+            return movies.appendingPathComponent("LiveFace", isDirectory: true)
+        }
+        return fm.homeDirectoryForCurrentUser
+            .appendingPathComponent("Movies/LiveFace", isDirectory: true)
+    }
 
     init(backend: BackendClient) {
         self.backend = backend
@@ -57,6 +74,9 @@ final class AppModel: ObservableObject {
         }
         if let saved = UserDefaults.standard.object(forKey: "lf_quality") as? Double {
             qualityPct = saved
+        }
+        if let saved = UserDefaults.standard.string(forKey: "lf_capture_dir"), !saved.isEmpty {
+            captureDirectory = URL(fileURLWithPath: saved, isDirectory: true)
         }
         camera.backend = backend
         camera.updateSettings(delayMs: delayMs, qualityPct: qualityPct)
@@ -81,6 +101,10 @@ final class AppModel: ObservableObject {
 
     func shutdown() {
         camera.stop()
+        if isRecording {
+            isRecording = false
+            mediaCapture.finishSynchronously()
+        }
         outputController?.close()
         outputController = nil
         if let keyMonitor {
@@ -103,6 +127,13 @@ final class AppModel: ObservableObject {
                 }
                 if state.settings.swap_count != self.swapCount {
                     self.swapCount = state.settings.swap_count
+                }
+                if let serverHead = state.settings.head_swap {
+                    if self.headSwapDirty {
+                        if serverHead == self.headSwap { self.headSwapDirty = false }
+                    } else if serverHead != self.headSwap {
+                        self.headSwap = serverHead
+                    }
                 }
                 if state.ready, self.pendingStart {
                     self.pendingStart = false
@@ -188,6 +219,9 @@ final class AppModel: ObservableObject {
             self.displayedImage = image
             self.outputController?.update(image)
             let now = CACurrentMediaTime()
+            if self.isRecording {
+                self.mediaCapture.append(image: image, hostTime: now)
+            }
             self.shownTimes.append(now)
             self.displaySamples.append((now - capture) * 1000)
             if self.displaySamples.count > 90 {
@@ -204,9 +238,13 @@ final class AppModel: ObservableObject {
         camera.onDrop = { [weak self] in self?.dropped += 1 }
         camera.onSkip = { [weak self] in self?.skipped += 1 }
         camera.onRunningChanged = { [weak self] running in
-            self?.isRunning = running
-            if running { self?.cameraPermissionIssue = false }
-            if !running { self?.previewImage = nil }
+            guard let self else { return }
+            self.isRunning = running
+            if running { self.cameraPermissionIssue = false }
+            if !running {
+                self.previewImage = nil
+                if self.isRecording { self.stopRecording() }
+            }
         }
         camera.onError = { [weak self] message in
             self?.alertMessage = message
@@ -227,6 +265,9 @@ final class AppModel: ObservableObject {
 
     private func tickMetrics() {
         let now = CACurrentMediaTime()
+        if isRecording, let started = recordStartedAt {
+            recordSeconds = max(0, Int(Date().timeIntervalSince(started)))
+        }
         shownTimes.removeAll { now - $0 > 2 }
         fps = Double(shownTimes.count) / 2.0
         latencyMs = percentile(Array(e2eSamples.suffix(30)), 0.5)
@@ -277,6 +318,17 @@ final class AppModel: ObservableObject {
         flash(value <= 0 ? "已切换：换所有人" : "已切换：同时换 \(value) 人")
     }
 
+    /// 用户自定义：换脸（仅面部） / 换头（发型 + 头部轮廓，实验）。
+    func setHeadSwap(_ enabled: Bool) {
+        guard enabled != headSwap else { return }
+        headSwap = enabled
+        headSwapDirty = true
+        backend.setHeadSwap(enabled)
+        flash(enabled
+              ? "换头已开启（实验）：叠加源发型与头部轮廓"
+              : "已切回换脸：只替换面部")
+    }
+
     /// 点击画面中的脸：x/y 为相对画面内容的 0–1 坐标。
     func selectTarget(x: Double, y: Double) {
         backend.selectTarget(x: x, y: y) { [weak self] ok, error in
@@ -302,6 +354,101 @@ final class AppModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: item)
     }
 
+    // MARK: - 截图 / 录制
+
+    var captureDirectoryDisplay: String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let path = captureDirectory.path
+        if path == home { return "~" }
+        if path.hasPrefix(home + "/") {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
+    }
+
+    var recordTimeText: String {
+        String(format: "%02d:%02d", recordSeconds / 60, recordSeconds % 60)
+    }
+
+    func chooseCaptureDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.prompt = "选择"
+        panel.message = "选择截图和录制的保存目录"
+        panel.directoryURL = captureDirectory
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        captureDirectory = url
+        UserDefaults.standard.set(url.path, forKey: "lf_capture_dir")
+        flash("保存目录：\(captureDirectoryDisplay)")
+    }
+
+    func openCaptureDirectory() {
+        try? FileManager.default.createDirectory(
+            at: captureDirectory, withIntermediateDirectories: true
+        )
+        NSWorkspace.shared.open(captureDirectory)
+    }
+
+    func captureScreenshot() {
+        guard let image = displayedImage else {
+            alertMessage = "还没有换脸画面，请先开始直播。"
+            return
+        }
+        do {
+            let url = try MediaCapture.saveScreenshot(image, in: captureDirectory)
+            lastCaptureURL = url
+            flash("已保存截图：\(url.lastPathComponent)")
+        } catch {
+            alertMessage = error.localizedDescription
+        }
+    }
+
+    func toggleRecording() {
+        if isRecording {
+            stopRecording()
+        } else {
+            startRecording()
+        }
+    }
+
+    private func startRecording() {
+        guard !isRecording else { return }
+        guard isRunning, let image = displayedImage else {
+            alertMessage = "开始直播后才能录制。请先点击「开始直播」。"
+            return
+        }
+        do {
+            let url = try mediaCapture.start(image: image, in: captureDirectory)
+            mediaCapture.append(image: image, hostTime: CACurrentMediaTime())
+            isRecording = true
+            recordStartedAt = Date()
+            recordSeconds = 0
+            lastCaptureURL = url
+            flash("开始录制：\(url.lastPathComponent)")
+        } catch {
+            alertMessage = error.localizedDescription
+        }
+    }
+
+    func stopRecording() {
+        guard isRecording else { return }
+        isRecording = false
+        recordStartedAt = nil
+        mediaCapture.finish { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let url):
+                self.lastCaptureURL = url
+                self.flash("已保存视频：\(url.lastPathComponent)")
+            case .failure(let error):
+                self.alertMessage = error.localizedDescription
+            }
+        }
+    }
+
     // MARK: - 输出窗口
 
     func showOutputWindow() {
@@ -325,6 +472,17 @@ final class AppModel: ObservableObject {
                 return event
             }
             let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if modifiers.contains(.command),
+               let key = event.charactersIgnoringModifiers?.lowercased() {
+                if key == "s" {
+                    self.captureScreenshot()
+                    return nil
+                }
+                if key == "r" {
+                    self.toggleRecording()
+                    return nil
+                }
+            }
             if modifiers.isEmpty {
                 if event.keyCode == 49 { // Space
                     self.toggleCamera()

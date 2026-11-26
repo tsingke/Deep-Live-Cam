@@ -19,7 +19,8 @@ xcrun swiftc \
   -target arm64-apple-macosx14.0 \
   -sdk "$(xcrun --show-sdk-path)" \
   -framework SwiftUI -framework AppKit -framework AVFoundation \
-  -framework CoreImage -framework ImageIO -framework UniformTypeIdentifiers \
+  -framework CoreImage -framework CoreVideo -framework CoreMedia \
+  -framework ImageIO -framework UniformTypeIdentifiers \
   -framework QuartzCore \
   native/*.swift -o "$BUILD/LiveFace"
 
