@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>实时换脸输出</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b8cff'/%3E%3Ccircle cx='16' cy='12' r='5' fill='%23fff'/%3E%3Cpath d='M6 27c1.8-5 5.4-7 10-7s8.2 2 10 7' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    cursor: default;
+  }
+  body.idle { cursor: none; }
+  #view {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+  }
+  #overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    color: rgba(255, 255, 255, 0.55);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    background: #000;
+    transition: opacity 0.5s ease, visibility 0.5s;
+    user-select: none;
+  }
+  #overlay.hidden { opacity: 0; visibility: hidden; }
+  .ring {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-top-color: rgba(120, 160, 255, 0.9);
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="overlay">
+  <div class="ring" id="ring"></div>
+  <div id="msg">等待换脸画面…</div>
+</div>
+<script>
+'use strict';
+
+const canvas = document.getElementById('view');
+const ctx = canvas.getContext('2d', { alpha: false });
+const overlay = document.getElementById('overlay');
+const msg = document.getElementById('msg');
+const ring = document.getElementById('ring');
+
+const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('dlc-faceswap') : null;
+
+let latestBuf = null;
+let decoding = false;
+let lastFrameAt = 0;
+let stopped = false;
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.max(2, Math.round(window.innerWidth * dpr));
+  canvas.height = Math.max(2, Math.round(window.innerHeight * dpr));
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+resize();
+window.addEventListener('resize', resize);
+
+function drawFit(bmp) {
+  const cw = canvas.width, ch = canvas.height;
+  const scale = Math.min(cw / bmp.width, ch / bmp.height);
+  const w = bmp.width * scale;
+  const h = bmp.height * scale;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bmp, (cw - w) / 2, (ch - h) / 2, w, h);
+}
+
+async function pump() {
+  if (decoding) return;
+  decoding = true;
+  while (latestBuf) {
+    const buf = latestBuf;
+    latestBuf = null;
+    try {
+      const bmp = await createImageBitmap(new Blob([buf], { type: 'image/jpeg' }));
+      drawFit(bmp);
+      bmp.close && bmp.close();
+      lastFrameAt = performance.now();
+      stopped = false;
+      overlay.classList.add('hidden');
+    } catch (e) { /* ignore corrupt frame */ }
+  }
+  decoding = false;
+}
+
+function showOverlay(text, spinner) {
+  msg.textContent = text;
+  ring.style.display = spinner ? 'block' : 'none';
+  overlay.classList.remove('hidden');
+}
+
+if (bc) {
+  bc.addEventListener('message', (ev) => {
+    const m = ev.data || {};
+    if (m.type === 'frame' && m.buf) {
+      latestBuf = m.buf;
+      pump();
+    } else if (m.type === 'signal' && m.state === 'stopped') {
+      stopped = true;
+      showOverlay('直播已停止', false);
+    } else if (m.type === 'signal' && m.state === 'started') {
+      showOverlay('连接中…', true);
+    }
+  });
+
+  const hello = () => bc.postMessage({ type: 'hello' });
+  hello();
+  setInterval(() => bc.postMessage({ type: 'ping' }), 1000);
+  window.addEventListener('pagehide', () => bc.postMessage({ type: 'bye' }));
+} else {
+  showOverlay('浏览器不支持 BroadcastChannel', false);
+}
+
+/* 无画面超时提示 */
+setInterval(() => {
+  if (stopped) return;
+  if (!lastFrameAt) {
+    showOverlay('等待换脸画面…', true);
+  } else if (performance.now() - lastFrameAt > 3000) {
+    showOverlay('画面中断，检查控制台页面', true);
+    lastFrameAt = 0;
+  }
+}, 1000);
+
+/* 隐藏鼠标 */
+let idleTimer = null;
+function wake() {
+  document.body.classList.remove('idle');
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => document.body.classList.add('idle'), 1800);
+}
+document.addEventListener('mousemove', wake);
+wake();
+
+/* 双击/F 全屏 */
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+document.addEventListener('dblclick', toggleFullscreen);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+});
+</script>
+</body>
+</html>

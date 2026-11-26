@@ -1,438 +1,226 @@
-<h1 align="center">Deep-Live-Cam 2.1.6</h1>
+# 实时换脸直播 · Live Face Studio（Deep-Live-Cam 增强版）
 
-<p align="center">
-  Real-time face swap and video deepfake with a single click and only a single image.
-</p>
+<img src="assets/AppIcon.png" width="104" align="right" alt="LiveFace 图标">
 
-<p align="center">
-<a href="https://trendshift.io/repositories/11395" target="_blank"><img src="https://trendshift.io/api/badge/repositories/11395" alt="hacksider%2FDeep-Live-Cam | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-</p>
+在 Mac（Apple Silicon）上运行的**原生桌面 App**：SwiftUI 界面 + AVFoundation 直接采集
+摄像头，后台静默调用本地 [Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam)
+的 buffalo_l 检测与 inswapper_128_fp16 换脸（CoreML/ANE 加速），结果实时显示在 App 内，
+并可弹出纯净输出窗口给 OBS。**不需要打开网页。**
 
-<p align="center">
-  <img src="media/demo.gif" alt="Demo GIF" width="800">
-</p>
+```
+AVFoundation 摄像头 ──JPEG+8字节时间戳──▶ 本地服务 (127.0.0.1:8787)
+                                            │  2 帧并发 · 检测每 3 帧 · 积压丢帧
+                                            ▼
+                                    Deep-Live-Cam (CoreML)
+                                            │
+          换脸画面 ◀──── JPEG ──────────────┘
+               │
+               ├─▶ App 主预览（原生 SwiftUI）
+               └─▶ 纯净输出窗口（给 OBS 窗口采集）
+```
 
-##  Disclaimer
+Python 换脸服务由 App 在后台启动/复用，全程无终端、无浏览器。
 
-This deepfake software is designed to be a productive tool for the AI-generated media industry. It can assist artists in animating custom characters, creating engaging content, and even using models for clothing design.
+> 本仓库是 [hacksider/Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam) 的增强 fork：
+> 上游检测/换脸源码保留在根目录 `modules/`，本仓库新增原生 macOS App、实时后台、网页调试版与构建脚本。
+> 上游原有 GUI 仍可使用：`.venv/bin/python run.py`。
 
-We are aware of the potential for unethical applications and are committed to preventative measures. A built-in check prevents the program from processing inappropriate media (nudity, graphic content, sensitive material like war footage, etc.). We will continue to develop this project responsibly, adhering to the law and ethics. We may shut down the project or add watermarks if legally required.
+## 快速开始
 
-- Ethical Use: Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online.
+### 首次安装
 
-- Content Restrictions: The software includes built-in checks to prevent processing inappropriate media, such as nudity, graphic content, or sensitive material.
+```bash
+git clone https://github.com/tsingke/Deep-Live-Cam.git
+cd Deep-Live-Cam
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt -r requirements-web.txt
+./make_app.sh --install
+```
 
-- Legal Compliance: We adhere to all relevant laws and ethical guidelines. If legally required, we may shut down the project or add watermarks to the output.
+首次启动会自动下载模型到 `models/` 和 `~/.insightface/models/buffalo_l/`（约 1.1GB），
+并使用 CoreML 编译（1–3 分钟）。构建 App 需要 macOS 的 Command Line Tools。
 
-- User Responsibility: We are not responsible for end-user actions. Users must ensure their use of the software aligns with ethical standards and legal requirements.
+### 使用
 
-By using this software, you agree to these terms and commit to using it in a manner that respects the rights and dignity of others.
+双击 **`LiveFace.app`**（项目根目录或 `~/Applications`，Spotlight 搜 **LiveFace**）。
 
-Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
+1. 首次启动会请求**摄像头权限**（请允许）。
+2. 拖入或点击上传 1–9 张人像照片（自动提取人脸特征）。
+3. 点「开始直播」；按 **空格** 也可开始/停止。
+4. 点「输出窗口」，把弹出的纯净画面窗口留给 OBS 采集。
 
-## Pre-built Deep-Live-Cam 2.8 Ultimate!
-
-<p align="center">
-  <a href="https://deeplivecam.net/index.php/quickstart">
-    <img src="https://github.com/user-attachments/assets/fa2cdf79-c933-4b93-844a-b087192261ed" width="100%" alt="Lite / Ultimate Download Banner">
-  </a>
-</p>
-
-<p align="center">
-<a href="https://deeplivecam.net/index.php/plans/nvidia-gpu?plan_id=0&group_id=1">
-  <img src="https://github.com/user-attachments/assets/56b61811-3a1e-4672-9b50-cf7f6e8e6852" width="40" alt="Windows">
-</a>
-  &nbsp;&nbsp;&nbsp;
-<a href="https://deeplivecam.net/index.php/plans/nvidia-gpu?plan_id=0&group_id=2">
-  <img src="https://github.com/user-attachments/assets/6538e3a6-c957-431a-b586-2d6abcf534dc" width="34" alt="Mac Silicon">
-</a>
-  &nbsp;&nbsp;&nbsp;
-<a href="https://deeplivecam.net/index.php/plans/nvidia-gpu?plan_id=0&group_id=3">
-  <img src="https://github.com/user-attachments/assets/ad45142e-426c-4364-a2a9-a512670cc62c" width="40" alt="CPU">
-</a>
-</p>
-
-<p align="center">
-  <strong>Windows • Mac Silicon • CPU • NVIDIA • AMD</strong>
-</p>
-
-<p align="center">
-  Builds optimized for your hardware.
-</p>
-
-<p align="center">
-  <a href="https://deeplivecam.net/index.php/quickstart">
-    <img src="media/Download.png" width="280" alt="Download">
-  </a>
-</p>
-
-> **Ultimate** includes **30+ exclusive features**, performance optimizations, and **priority support** We only have a single official website which is https://deeplivecam.net . Please be careful on where you download other versions of this application aside from that website and this github repo.
-
-Perfect if you want the fastest setup with **zero manual installation**, pre-configured dependencies, and optimized builds for every supported platform.
-
-## TLDR; Live Deepfake in just 3 Clicks
-![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
-1. Select a face
-2. Select which camera to use
-3. Press live!
-
-## Features & Uses - Everything is in real-time
-
-### Mouth Mask
-
-**Retain your original mouth for accurate movement using Mouth Mask**
-
-<p align="center">
-  <img src="media/ludwig.gif" alt="resizable-gif">
-</p>
-
-### Face Mapping
-
-**Use different faces on multiple subjects simultaneously**
-
-<p align="center">
-  <img src="media/streamers.gif" alt="face_mapping_source">
-</p>
-
-### Your Movie, Your Face
-
-**Watch movies with any face in real-time**
-
-<p align="center">
-  <img src="media/movie.gif" alt="movie">
-</p>
-
-### Live Show
-
-**Run Live shows and performances**
-
-<p align="center">
-  <img src="media/live_show.gif" alt="show">
-</p>
-
-### Memes
-
-**Create Your Most Viral Meme Yet**
-
-<p align="center">
-  <img src="media/meme.gif" alt="show" width="450"> 
-  <br>
-  <sub>Created using Many Faces feature in Deep-Live-Cam</sub>
-</p>
-
-### Omegle
-
-**Surprise people on Omegle**
-
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/2e9b9b82-fa04-4b70-9f56-b1f68e7672d0" width="450" controls></video>
-</p>
-
-## Installation (Manual)
-
-**Please be aware that the installation requires technical skills and is not for beginners. Consider downloading the quickstart version.**
+> 换脸服务只监听 `127.0.0.1`，不会暴露到局域网/公网。App 退出时若服务是它启动的，
+> 会一并停止；服务闲置 **2 小时**也会自动退出（下次点开始会自动重启）。
 
 <details>
-<summary>Click to see the process</summary>
+<summary>网页版（调试用，可选）</summary>
 
-### Installation
-
-This is more likely to work on your computer but will be slower as it utilizes the CPU.
-
-**1. Set up Your Platform**
-
--   Python (3.14 recommended; 3.11-3.14 supported)
--   pip
--   git
--   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) - ```iex (irm ffmpeg.tc.ht)```
--   [Visual Studio 2022 Runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-
-**2. Clone the Repository**
-
-```bash
-git clone --depth 1 https://github.com/hacksider/Deep-Live-Cam.git
-cd Deep-Live-Cam
-```
-
-**3. Download the Models**
-
-1. [gfpgan-1024.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/gfpgan-1024.onnx)
-2. [inswapper\_128\_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
-
-Place these files in the "**models**" folder.
-
-**4. Install Dependencies**
-
-We highly recommend using a `venv` to avoid issues.
-
-
-For Windows:
-```bash
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```
-For Linux:
-```bash
-# Ensure you use the installed Python 3.14
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-**For macOS:**
-
-Apple Silicon (M1 through M5) requires specific setup:
-
-```bash
-# Install Python 3.14
-brew install python@3.14
-
-# Install tkinter package (required for the GUI)
-brew install python-tk@3.14
-
-# Create and activate virtual environment with Python 3.14
-python3.14 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-** In case something goes wrong and you need to reinstall the virtual environment **
-
-```bash
-# Deactivate the virtual environment
-rm -rf venv
-
-# Reinstall the virtual environment
-python -m venv venv
-source venv/bin/activate
-
-# install the dependencies again
-pip install -r requirements.txt
-
-# gfpgan and basicsrs issue fix
-pip install git+https://github.com/xinntao/BasicSR.git@master
-pip uninstall gfpgan -y
-pip install git+https://github.com/TencentARC/GFPGAN.git@master
-```
-
-**Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py`. Note that initial execution will download models (~300MB).
-
-### GPU Acceleration
-
-**CUDA Execution Provider (Nvidia)**
-
-1. Install [CUDA Toolkit 12.8.0](https://developer.nvidia.com/cuda-12-8-0-download-archive)
-2. Install [cuDNN v8.9.7 for CUDA 12.x](https://developer.nvidia.com/rdp/cudnn-archive) (required for onnxruntime-gpu):
-   - Download cuDNN v8.9.7 for CUDA 12.x
-   - Make sure the cuDNN bin directory is in your system PATH
-3. Install dependencies:
-
-```bash
-pip install -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-pip uninstall onnxruntime onnxruntime-gpu
-pip install onnxruntime-gpu==1.26.0
-```
-
-3. Usage:
-
-```bash
-python run.py --execution-provider cuda
-```
-
-**CoreML Execution Provider (Apple Silicon)**
-
-Apple Silicon (M1 through M5) specific installation:
-
-1. Make sure you've completed the macOS setup above using Python 3.14.
-2. No extra install step is needed — `requirements.txt` pulls the official
-   `onnxruntime` build, whose macOS wheels ship the CoreML execution provider.
-   If you previously installed the unmaintained `onnxruntime-silicon` fork,
-   remove it first, as it shadows the real package:
-
-```bash
-pip uninstall onnxruntime-silicon
-pip install -r requirements.txt
-```
-
-3. Usage:
-
-```bash
-python3.14 run.py --execution-provider coreml
-```
-
-**Important Notes for macOS:**
-- Python 3.11 is the minimum (onnxruntime dropped 3.10); 3.14 is recommended
-- Always run with `python3.14` command not just `python` if you have multiple Python versions installed
-- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.14`
-- If you get model loading errors, check that your models are in the correct folder
-- If you encounter conflicts with other Python versions, consider uninstalling them:
-  ```bash
-  # List all installed Python versions
-  brew list | grep python
-
-  # Uninstall conflicting versions if needed
-  brew uninstall --ignore-dependencies python@3.11
-
-  # Keep only Python 3.14
-  brew cleanup
-  ```
-
-**CoreML Execution Provider (Apple Legacy)**
-
-1. Install dependencies:
-
-```bash
-pip uninstall onnxruntime onnxruntime-coreml
-pip install onnxruntime-coreml==1.21.0
-```
-
-2. Usage:
-
-```bash
-python run.py --execution-provider coreml
-```
-
-**DirectML Execution Provider (Windows)**
-
-1. Install dependencies:
-
-```bash
-pip uninstall onnxruntime onnxruntime-directml
-pip install onnxruntime-directml==1.21.0
-```
-
-2. Usage:
-
-```bash
-python run.py --execution-provider dml
-```
-
-**OpenVINO™ Execution Provider (Intel)**
-
-1. Install dependencies:
-
-```bash
-pip uninstall onnxruntime onnxruntime-openvino
-pip install onnxruntime-openvino==1.21.0
-```
-
-**Note:** `onnxruntime-openvino` newer than 1.21.0 must be installed together with `openvino`, and the two versions must correspond one-to-one. The supported pairings are:
-
-| onnxruntime-openvino | OpenVINO |
-| --- | --- |
-| 1.24.1 | 2025.4.1 |
-| 1.23.0 | 2025.3 |
-| 1.22.0 | 2025.1 |
-
-```bash
-# Example: onnxruntime-openvino 1.24.1 pairs with OpenVINO 2025.4.1
-pip install openvino==2025.4.1
-pip install onnxruntime-openvino==1.24.1
-```
-
-See the [OpenVINO Execution Provider requirements](https://onnxruntime.ai/docs/execution-providers/OpenVINO-ExecutionProvider.html#requirements) for the full version-mapping details.
-
-2. Usage:
-
-```bash
-python run.py --execution-provider openvino
-```
+`start.command` 仍保留浏览器控制台，连接同一个后台服务；日常使用不需要它。
 </details>
 
-## Usage
+## 使用说明
 
-**1. Image/Video Mode**
+### 照片库
+- 支持一次上传多张；也可以把图片直接**拖进 App 窗口**。
+- 点击缩略图或按 **1–9** 实时切换，不断流。
+- 每张照片会自动用 buffalo_l 检测最大人脸并提取 512 维特征。
+- 照片保存在 `photos/`，索引在 `photos/library.json`，重启 App 后自动恢复。
 
--   Execute `python run.py`.
--   Choose a source face image and a target image/video.
--   Click "Start".
--   The output will be saved in a directory named after the target video.
+### 换脸人数与锁定主角
 
-**2. Webcam Mode**
+- 侧栏「换脸人数」可选 **1 人（主角）/ 2 人 / 3 人 / 全部**。
+- 「1 人（主角）」会锁定画面中最大、最靠中心的那个人：**只换主角，其他人不换**；
+  主角离开画面时宁可不换，也不会换到别人身上。
+- 直播中直接**点击画面里的人脸**即可锁定/切换主角；点「自动选择」恢复自动锁定。
+- 选 2/3/全部时，按人脸从大到小换相应数量；点击某张脸会把它作为第一主角。
+- 停止 5 秒以上再开始（或重启 App）会重新自动锁定。
+- 多换人、主角身份识别会增加一点耗时；近距离大脸也会让换脸变慢，离镜头稍远更流畅。
 
--   Execute `python run.py`.
--   Select a source face image.
--   Click "Live".
--   Wait for the preview to appear (10-30 seconds).
--   Use a screen capture tool like OBS to stream.
--   To change the face, select a new source image.
+### 音画同步（可选固定延迟）
+App 侧栏的 **固定延迟** 控制每一帧在「拍摄后 N 毫秒」才上屏：
 
-## Download all models in this huggingface link
-- [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)
+| 固定延迟 | 效果 |
+|---|---|
+| `0 ms` | 最低延迟（处理完立刻显示），音画可能不同步（视频比声音晚约 40–80ms） |
+| `300 ms` | 视频固定晚 300ms，画面不抖；把 OBS 麦克风的「同步偏移」也设为 **300** |
 
-## Command Line Arguments (Unmaintained)
+OBS 设置：`麦克风 → 高级音频属性 → 同步偏移 = 与 App 中相同的毫秒数`。
+
+### OBS 采集
+1. App 点 **输出窗口**，弹出只显示换脸画面的 1280×720 窗口（黑底、无控件、自动等比留边）。
+2. OBS 添加 **窗口采集**，选择窗口 `实时换脸输出`。
+3. 第一次使用需在「系统设置 → 隐私与安全性 → 屏幕录制」中允许 OBS。
+4. 输出窗口内按 `F` 或双击全屏，`Esc` 关闭；1.8 秒不动鼠标自动隐藏光标。
+
+### 保持流畅的小贴士
+- 直播时关掉 Parallels 虚拟机、长时间视频/音乐等重负载应用，能给 ANE/GPU 让路。
+- 换脸耗时随人脸像素面积增长：720p 里约 100px 的脸 ~67ms；占满画面的特写
+  约 120ms，帧率会相应下降。离镜头稍远一点会更流畅。
+- 摄像头建议 1280×720@30；4K 采集会让 JPEG 编解码成为瓶颈。
+- 首次点开始时若没有画面，检查「系统设置 → 隐私与安全性 → 摄像头」是否允许 LiveFace。
+
+## 原生 App 与图标
+
+- `LiveFace.app`：SwiftUI 原生界面 + AVFoundation 摄像头；后台静默启动/复用
+  Python 换脸服务，**不打开浏览器**。主界面包含照片库、延迟/画质、FPS/延迟/丢帧、
+  可展开的运行状态/OBS 说明、以及独立的纯净输出窗口。
+- 快捷键：`空格` 开始/停止，`1–9` 切换人物，`⌘⇧O` 打开输出窗口。
+- 退出 App 时，如果后台服务是它启动的，会一并停止；外部已运行的服务不受影响。
+- 图标：`assets/AppIcon.png` / `AppIcon.icns`，深色玻璃底 + 双头像 + 双向箭头，
+  3× 超采样，16–1024px 全尺寸。
+- 构建：
+  - `./make_app.sh --install`（推荐）或 `./make_native_app.sh --install`
+  - 只需 Command Line Tools（Swift 6.4 / macOS SDK），不需要安装 Xcode。
+- App 为本地 ad-hoc 签名；**移动项目目录后**重新执行 `./make_app.sh --install`
+  以更新内嵌路径。
+- 调试参数（一般用户不用）：
+  `LiveFace.app/Contents/MacOS/LiveFace --demo` 用测试图模拟摄像头；
+  加 `--output` 自动打开输出窗口；加 `--snapshot /tmp/ui.png` 渲染界面后退出。
+
+## 性能设计
+
+- **最多 2 帧同时处理**：服务端固定 2 个 worker 线程，芯片不空等；JPEG 解码/编码、
+  人脸检测、换脸推理都在 worker 内完成。
+- **积压丢旧帧**：等待队列只有 1 格，新帧到达时把排队中的旧帧直接作废（HTTP 204），
+  App 端 2 个请求在途、忙就跳过这一拍——两处都保证「画面不越拖越晚」。
+- **检测降频**：默认每 3 帧检测一次，中间帧复用上一帧的 bbox/kps
+  （可在 App 侧栏切换）。
+- **CoreML**：inswapper 会话使用 `CoreMLExecutionProvider`（MLProgram / ALL 计算单元），
+  检测模型走 CPUAndGPU，两者可以并行占满 ANE 与 GPU。
+- **预热**：启动时先跑一次空帧预热检测模型；首次上传照片后用该照片触发一次完整换脸，
+  完成 CoreML 首次编译。
+- **2 小时闲置退出**：只有帧/上传/切换会刷新活跃时间，App 轮询状态不会阻止退出。
+
+## 实测结果（M3 Pro / 18GB）
+
+测试条件：1280×720 @30fps 的 6 秒人像视频循环 300 帧，JPEG 质量 72，
+App 同款协议（8 字节时间戳、最多 2 帧在途、忙则丢拍），固定延迟 300ms。
+
+| 指标 | 结果 |
+|---|---|
+| 端到端「拍摄 → 服务端返回」 | **p50 76.7 ms / p95 92.4 ms** |
+| 服务端单帧总耗时 | p50 75.9 ms（解码 1.3 / 检测 14.4 / 换脸 66.8 / 编码 1.5） |
+| 检测复用率 | 66%（每 3 帧检测一次） |
+| 实际呈现吞吐 | **21.6 fps**（源 30fps，App 忙丢弃 28%） |
+| 固定 300ms 延迟 | 实际 **300.0 ms**，准时率 **100%** |
+| 压满吞吐（2 帧始终在途） | 18.6 fps，单帧升到 ~105 ms |
+| CoreML vs CPU（单次换脸） | 48 ms vs ~690 ms（约 **14×**） |
+| 服务启动时间 | 冷启动 41 s；热启动 16 s；检测预热 60–100 ms；换脸预热 0.1–0.9 s |
+
+> 原生 App 的 `--demo` 模式（测试图模拟摄像头）实测 **20.5 fps / 80 ms**，输出窗口同步正常。
+> 真实摄像头近距离大脸时约 **6–12 fps**；离镜头远一点、关闭 Parallels 等重负载应用可回到 15–20 fps。
+> 21fps 已是这块 M3 Pro 上 inswapper 128 的 ANE 上限：单流 48ms，
+> 2 帧并发时 ANE 序列化导致单帧 ~66ms。M4/M5 会更快。
+> 换脸有效性用 512 维人脸特征验证：换脸后最左脸与源人物余弦相似度
+> **0.914**，与原目标脸仅 0.222。
+
+
+## 文件结构
 
 ```
-options:
-  -h, --help                                               show this help message and exit
-  -s SOURCE_PATH, --source SOURCE_PATH                     select a source image
-  -t TARGET_PATH, --target TARGET_PATH                     select a target image or video
-  -o OUTPUT_PATH, --output OUTPUT_PATH                     select output file or directory
-  --frame-processor FRAME_PROCESSOR [FRAME_PROCESSOR ...]  frame processors (choices: face_swapper, face_enhancer, ...)
-  --keep-fps                                               keep original fps
-  --keep-audio                                             keep original audio
-  --keep-frames                                            keep temporary frames
-  --many-faces                                             process every face
-  --map-faces                                              map source target faces
-  --mouth-mask                                             mask the mouth region
-  --video-encoder {libx264,libx265,libvpx-vp9}             adjust output video encoder
-  --video-quality [0-51]                                   adjust output video quality
-  --live-mirror                                            the live camera display as you see it in the front-facing camera frame
-  --live-resizable                                         the live camera frame is resizable
-  --max-memory MAX_MEMORY                                  maximum amount of RAM in GB
-  --execution-provider {cpu} [{cpu} ...]                   available execution provider (choices: cpu, ...)
-  --execution-threads EXECUTION_THREADS                    number of execution threads
-  -v, --version                                            show program's version number and exit
+tsingke/Deep-Live-Cam/
+├─ LiveFace.app               # 构建产物（不入库；./make_app.sh 生成）
+├─ native/                    # SwiftUI 源码
+│  ├─ LiveFaceApp.swift       # App 入口、菜单、快照
+│  ├─ ContentView.swift       # 原生界面
+│  ├─ AppModel.swift          # 状态、统计、快捷键、输出窗口
+│  ├─ BackendClient.swift     # 启动/复用 Python 服务、HTTP API
+│  ├─ CameraController.swift  # AVFoundation 采集 → JPEG → 换脸 → 延迟上屏
+│  ├─ OutputWindow.swift      # OBS 纯净输出窗口
+│  ├─ Models.swift            # 服务端数据模型
+│  └─ main.swift              # AppKit 入口
+├─ make_app.sh                # 构建原生 App（--install 安装到 ~/Applications）
+├─ make_native_app.sh         # 原生构建细节
+├─ assets/                    # AppIcon.png/.icns + make_icon.py
+├─ web_server.py              # aiohttp 后台服务（2 处理槽、检测缓存、照片库、闲置退出）
+├─ web/                       # 网页版控制台（调试用，可选）
+├─ start.command              # 浏览器调试入口
+├─ modules/                   # 上游 Deep-Live-Cam 源码（检测/换脸）
+├─ models/                    # 模型缓存（自动下载，不入库）
+├─ requirements.txt           # 上游 Python 依赖
+├─ photos/                    # 上传的照片 + library.json
+└─ logs/                      # server.log / native-app.log
 ```
 
-Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
+## 重新构建 App
 
-## Press
+```bash
+./make_app.sh --install
+```
 
- - [**Ars Technica**](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - *"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"*
- - [**Yahoo!**](https://www.yahoo.com/tech/ok-viral-ai-live-stream-080041056.html) - *"OK, this viral AI live stream software is truly terrifying"*
- - [**CNN Brasil**](https://www.cnnbrasil.com.br/tecnologia/ia-consegue-clonar-rostos-na-webcam-entenda-funcionamento/) - *"AI can clone faces on webcam; understand how it works"*
- - [**Bloomberg Technoz**](https://www.bloombergtechnoz.com/detail-news/71032/kenalan-dengan-teknologi-deep-live-cam-bisa-jadi-alat-menipu) - *"Get to know Deep Live Cam technology, it can be used as a tool for deception."*
- - [**TrendMicro**](https://www.trendmicro.com/vinfo/gb/security/news/cyber-attacks/ai-vs-ai-deepfakes-and-ekyc) - *"AI vs AI: DeepFakes and eKYC"*
- - [**PetaPixel**](https://petapixel.com/2024/08/14/deep-live-cam-deepfake-ai-tool-lets-you-become-anyone-in-a-video-call-with-single-photo-mark-zuckerberg-jd-vance-elon-musk/) - *"Deepfake AI Tool Lets You Become Anyone in a Video Call With Single Photo"*
- - [**SomeOrdinaryGamers**](https://www.youtube.com/watch?time_continue=1074&v=py4Tc-Y8BcY) - *"That's Crazy, Oh God. That's Fucking Freaky Dude... That's So Wild Dude"*
- - [**IShowSpeed**](https://www.youtube.com/live/mFsCe7AIxq8?feature=shared&t=2686) - *"Alright look look look, now look chat, we can do any face we want to look like chat"*
- - [**TechLinked (Linus Tech Tips)**](https://www.youtube.com/watch?v=wnCghLjqv3s&t=551s) - *"They do a pretty good job matching poses, expression and even the lighting"*
- - [**IShowSpeed**](https://youtu.be/JbUPRmXRUtE?t=3964) - *"What the F***! Why do I look like Vinny Jr? I look exactly like Vinny Jr!? No, this shit is crazy! Bro This is F*** Crazy!"*
+移动项目目录后需要重新执行，以更新 App 内嵌路径。
+模型合计约 1.1GB（inswapper 2×265MB + buffalo_l 383MB），另需 1–2GB
+临时空间供 CoreML 首次编译。
 
+## 故障排查
 
-## Credits
+| 现象 | 处理 |
+|---|---|
+| App 显示「服务启动失败」 | 看 `logs/native-app.log` / `logs/server.log`；多为模型缺失或网络问题 |
+| App 没有摄像头画面 | 系统设置 → 隐私与安全性 → 摄像头 → 允许 LiveFace；确认摄像头未被其他应用占用 |
+| 提示「换脸模型正在首次预热」 | 等 1–3 分钟；期间不要重复上传 |
+| 点开始直播后 App 退出 | App 会把异常原因写入 `logs/native-crash.log`，请查看该文件 |
+| 点击人脸没有锁定 | 需在直播中点击；脸太小/被遮挡时可能无法锁定。点「自动选择」恢复 |
+| `onnxruntime 没有 CoreMLExecutionProvider` | 确认装的是 `onnxruntime==1.28.0`（darwin arm64 wheel），`python -c "import onnxruntime; print(onnxruntime.get_available_providers())"` |
+| OBS 窗口采集黑屏 | 给 OBS 屏幕录制权限；输出窗口必须保持可见（不能被完全遮挡/最小化） |
+| 端口被占用 | 已有服务在运行；退出旧实例或 `pkill -f web_server.py` 后重启 App |
+| 想手动启动 | `.venv/bin/python web_server.py --port 8787` |
 
--   [ffmpeg](https://ffmpeg.org/): for making video-related operations easy
--   [Henry](https://github.com/henryruhs): One of the major contributor in this repo
--   [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models. Please be reminded that the [use of the model is for non-commercial research purposes only](https://github.com/deepinsight/insightface?tab=readme-ov-file#license).
--   [havok2-htwo](https://github.com/havok2-htwo): for sharing the code for webcam
--   [GosuDRM](https://github.com/GosuDRM): for the open version of roop
--   [pereiraroland26](https://github.com/pereiraroland26): Multiple faces support
--   [vic4key](https://github.com/vic4key): For supporting/contributing to this project
--   [kier007](https://github.com/kier007): for improving the user experience
--   [qitianai](https://github.com/qitianai): for multi-lingual support
--   [laurigates](https://github.com/laurigates): Decoupling stuffs to make everything faster!
--   [maxwbuckley](https://github.com/maxwbuckley): For making the effort to optimize this for mac!
--   and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
--   Footnote: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
--   All the wonderful users who helped make this project go viral by starring the repo ❤️
+## 合规提醒
 
-[![Stargazers](https://reporoster.com/stars/hacksider/Deep-Live-Cam)](https://github.com/hacksider/Deep-Live-Cam/stargazers)
+实时换脸属于双重用途技术。请仅用于**本人形象、已获授权的人物**或明确标注的娱乐内容；
+不要用于冒充他人、诈骗、伪造证据或任何可能误导他人的场景。发布换脸内容时请遵守
+当地法律与平台规则。
 
-## Contributions
+## 上游与许可
 
-![Alt](https://repobeats.axiom.co/api/embed/fec8e29c45dfdb9c5916f3a7830e1249308d20e1.svg "Repobeats analytics image")
+本仓库基于 [hacksider/Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam)。
+上游代码、模型与许可证见根目录 `LICENSE`。新增的原生 App、实时后台与网页调试界面
+为本仓库的增强部分。
 
-## Stars to the Moon 🚀
+## 技术栈
 
-<a href="https://star-history.com/#hacksider/deep-live-cam&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date" />
- </picture>
-</a>
+- Python 3.12 / aiohttp / OpenCV / onnxruntime 1.28 (CoreML EP)
+- 上游模型：buffalo_l（检测/识别/ landmarks）、inswapper_128_fp16（换脸）
+- 原生 App：SwiftUI + AVFoundation + ImageIO，Swift 6.4 / macOS SDK，命令行构建
+- 网页调试版：原生 JS + OffscreenCanvas + getUserMedia + BroadcastChannel

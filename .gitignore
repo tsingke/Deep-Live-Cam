@@ -29,3 +29,19 @@ switch_states.json
 install.bat
 /.claude
 *.bat
+
+# ---- LiveFace additions ----
+photos/
+logs/
+config.json
+LiveFace.app/
+.build-native/
+benchmark_output/
+benchmark_output_smoke.jpg
+.impeccable/
+.playwright-mcp/
+.DS_Store
+
+# 上游忽略 *.png / *.mp4；保留本项目的图标和测试视频
+!assets/AppIcon.png
+!test_assets/test_clip.mp4
