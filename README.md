@@ -7,17 +7,24 @@
 的 buffalo_l 检测与 inswapper_128_fp16 换脸（CoreML/ANE 加速），结果实时显示在 App 内，
 并可弹出纯净输出窗口给 OBS。**不需要打开网页。**
 
-```
-AVFoundation 摄像头 ──JPEG+8字节时间戳──▶ 本地服务 (127.0.0.1:8787)
-                                            │  2 帧并发 · 检测每 3 帧 · 积压丢帧
-                                            ▼
-                                    Deep-Live-Cam (CoreML)
-                                            │
-          换脸画面 ◀──── JPEG ──────────────┘
-               │
-               ├─▶ App 主预览（原生 SwiftUI）
-               └─▶ 纯净输出窗口（给 OBS 窗口采集）
-```
+## 界面预览
+
+<p align="center"><img src="docs/ui-main.png" alt="LiveFace 主界面：照片库、同步与画质、实时预览" width="900"></p>
+
+<p align="center"><sub>主界面 · 空白照片库（截图不含任何人物照片）</sub></p>
+
+<p align="center"><img src="docs/ui-settings.png" alt="同步与画质、换脸人数设置" width="420"></p>
+
+<p align="center"><sub>固定延迟、发送画质、检测间隔、换脸人数与主角锁定</sub></p>
+
+> 截图使用空白照片库与待机画面，不含任何人物照片或个人信息。
+
+## 工作流程
+
+<p align="center"><img src="docs/pipeline.png" alt="从摄像头到 OBS 的实时换脸链路" width="900"></p>
+
+一帧画面从 AVFoundation 采集，经本地 aiohttp 服务交给 Deep-Live-Cam（CoreML/ANE）
+检测与换脸，再回到 App 预览和 OBS 输出窗口；照片与画面都不离开本机。
 
 Python 换脸服务由 App 在后台启动/复用，全程无终端、无浏览器。
 
@@ -113,9 +120,7 @@ OBS 设置：`麦克风 → 高级音频属性 → 同步偏移 = 与 App 中相
   - 只需 Command Line Tools（Swift 6.4 / macOS SDK），不需要安装 Xcode。
 - App 为本地 ad-hoc 签名；**移动项目目录后**重新执行 `./make_app.sh --install`
   以更新内嵌路径。
-- 调试参数（一般用户不用）：
-  `LiveFace.app/Contents/MacOS/LiveFace --demo` 用测试图模拟摄像头；
-  加 `--output` 自动打开输出窗口；加 `--snapshot /tmp/ui.png` 渲染界面后退出。
+- 调试参数（一般用户不用）：`--snapshot /tmp/ui.png` 渲染界面后退出。
 
 ## 性能设计
 
@@ -133,8 +138,8 @@ OBS 设置：`麦克风 → 高级音频属性 → 同步偏移 = 与 App 中相
 
 ## 实测结果（M3 Pro / 18GB）
 
-测试条件：1280×720 @30fps 的 6 秒人像视频循环 300 帧，JPEG 质量 72，
-App 同款协议（8 字节时间戳、最多 2 帧在途、忙则丢拍），固定延迟 300ms。
+测试条件：1280×720 @30fps、JPEG 质量 72，App 同款协议
+（8 字节时间戳、最多 2 帧在途、忙则丢拍），固定延迟 300ms。
 
 | 指标 | 结果 |
 |---|---|
@@ -147,7 +152,7 @@ App 同款协议（8 字节时间戳、最多 2 帧在途、忙则丢拍），�
 | CoreML vs CPU（单次换脸） | 48 ms vs ~690 ms（约 **14×**） |
 | 服务启动时间 | 冷启动 41 s；热启动 16 s；检测预热 60–100 ms；换脸预热 0.1–0.9 s |
 
-> 原生 App 的 `--demo` 模式（测试图模拟摄像头）实测 **20.5 fps / 80 ms**，输出窗口同步正常。
+> 原生 App 实测 **20.5 fps / 80 ms**，输出窗口同步正常。
 > 真实摄像头近距离大脸时约 **6–12 fps**；离镜头远一点、关闭 Parallels 等重负载应用可回到 15–20 fps。
 > 21fps 已是这块 M3 Pro 上 inswapper 128 的 ANE 上限：单流 48ms，
 > 2 帧并发时 ANE 序列化导致单帧 ~66ms。M4/M5 会更快。
@@ -172,6 +177,7 @@ tsingke/Deep-Live-Cam/
 ├─ make_app.sh                # 构建原生 App（--install 安装到 ~/Applications）
 ├─ make_native_app.sh         # 原生构建细节
 ├─ assets/                    # AppIcon.png/.icns + make_icon.py
+├─ docs/                      # README 截图与工作流程图
 ├─ web_server.py              # aiohttp 后台服务（2 处理槽、检测缓存、照片库、闲置退出）
 ├─ web/                       # 网页版控制台（调试用，可选）
 ├─ start.command              # 浏览器调试入口

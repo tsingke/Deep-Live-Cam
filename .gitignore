@@ -42,6 +42,6 @@ benchmark_output_smoke.jpg
 .playwright-mcp/
 .DS_Store
 
-# 上游忽略 *.png / *.mp4；保留本项目的图标和测试视频
+# 上游忽略 *.png / *.mp4；保留本项目图标与 README 截图
 !assets/AppIcon.png
-!test_assets/test_clip.mp4
+!docs/*.png
