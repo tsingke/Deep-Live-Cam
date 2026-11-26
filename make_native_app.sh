@@ -50,6 +50,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>LSApplicationCategoryType</key><string>public.app-category.video</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSCameraUsageDescription</key><string>实时换脸需要访问摄像头来采集画面。</string>
+  <key>NSMicrophoneUsageDescription</key><string>录制本地换脸视频时需要访问麦克风；不录制时不会采集。</string>
   <key>NSAppTransportSecurity</key>
   <dict><key>NSAllowsLocalNetworking</key><true/></dict>
   <key>NSPrincipalClass</key><string>NSApplication</string>

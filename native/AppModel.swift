@@ -26,6 +26,7 @@ final class AppModel: ObservableObject {
     @Published var headOffsetY = 0
     @Published var captureDirectory: URL = AppModel.defaultCaptureDirectory()
     @Published var isRecording = false
+    @Published var recordingWithAudio = false
     @Published var recordSeconds = 0
     @Published var lastCaptureURL: URL?
     @Published var transientMessage: String?
@@ -58,6 +59,8 @@ final class AppModel: ObservableObject {
     private var headSwapDirty = false
     private var headParamsInitialized = false
     private let mediaCapture = MediaCapture()
+    private let audioCapture = AudioCaptureController()
+    private var startingRecording = false
     private var recordStartedAt: Date?
 
     var isDemo: Bool { camera.isDemo }
@@ -84,6 +87,12 @@ final class AppModel: ObservableObject {
         }
         camera.backend = backend
         camera.updateSettings(delayMs: delayMs, qualityPct: qualityPct)
+        audioCapture.onSample = { [weak self] sampleBuffer in
+            DispatchQueue.main.async {
+                guard let self, self.isRecording else { return }
+                self.mediaCapture.appendAudio(sampleBuffer)
+            }
+        }
         wireCamera()
         observeBackend()
     }
@@ -105,8 +114,10 @@ final class AppModel: ObservableObject {
 
     func shutdown() {
         camera.stop()
+        audioCapture.stop()
         if isRecording {
             isRecording = false
+            recordingWithAudio = false
             mediaCapture.finishSynchronously()
         }
         outputController?.close()
@@ -230,7 +241,7 @@ final class AppModel: ObservableObject {
             self.outputController?.update(image)
             let now = CACurrentMediaTime()
             if self.isRecording {
-                self.mediaCapture.append(image: image, hostTime: now)
+                self.mediaCapture.append(image: image, hostTime: capture)
             }
             self.shownTimes.append(now)
             self.displaySamples.append((now - capture) * 1000)
@@ -446,28 +457,62 @@ final class AppModel: ObservableObject {
     }
 
     private func startRecording() {
-        guard !isRecording else { return }
+        guard !isRecording, !startingRecording else { return }
         guard isRunning, let image = displayedImage else {
             alertMessage = "开始直播后才能录制。请先点击「开始直播」。"
             return
         }
-        do {
-            let url = try mediaCapture.start(image: image, in: captureDirectory)
-            mediaCapture.append(image: image, hostTime: CACurrentMediaTime())
-            isRecording = true
-            recordStartedAt = Date()
-            recordSeconds = 0
-            lastCaptureURL = url
-            flash("开始录制：\(url.lastPathComponent)")
-        } catch {
-            alertMessage = error.localizedDescription
+        startingRecording = true
+
+        let begin: (Bool) -> Void = { [weak self] withAudio in
+            guard let self else { return }
+            self.startingRecording = false
+            guard self.isRunning else {
+                self.audioCapture.stop()
+                self.alertMessage = "摄像头已停止，录制取消。"
+                return
+            }
+            do {
+                let url = try self.mediaCapture.start(
+                    image: image, in: self.captureDirectory, withAudio: withAudio
+                )
+                self.recordingWithAudio = withAudio
+                self.isRecording = true
+                self.recordStartedAt = Date()
+                self.recordSeconds = 0
+                self.lastCaptureURL = url
+                self.flash(
+                    withAudio
+                    ? "开始录制（含麦克风）：\(url.lastPathComponent)"
+                    : "开始录制（无麦克风）：\(url.lastPathComponent)"
+                )
+            } catch {
+                self.audioCapture.stop()
+                self.recordingWithAudio = false
+                self.alertMessage = error.localizedDescription
+            }
+        }
+
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        if status == .authorized || status == .notDetermined {
+            audioCapture.start { ok in
+                if !ok {
+                    self.flash("麦克风不可用：只录制画面")
+                }
+                begin(ok)
+            }
+        } else {
+            begin(false)
+            flash("麦克风未授权：只录制画面；可在系统设置开启")
         }
     }
 
     func stopRecording() {
         guard isRecording else { return }
         isRecording = false
+        recordingWithAudio = false
         recordStartedAt = nil
+        audioCapture.stop()
         mediaCapture.finish { [weak self] result in
             guard let self else { return }
             switch result {

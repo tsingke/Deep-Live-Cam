@@ -497,14 +497,19 @@ private struct SidebarView: View {
 
                 Spacer()
 
-                Text(model.isRecording ? "H.264 · 无音频" : "PNG · MP4（H.264）")
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.secondary)
+                Text(
+                    model.isRecording
+                    ? (model.recordingWithAudio ? "H.264 · 麦克风" : "H.264 · 无音频")
+                    : "PNG · MP4（H.264 + 麦克风）"
+                )
+                .font(.system(size: 9.5))
+                .foregroundStyle(.secondary)
             }
 
-            Text("录制换脸后的干净画面，不含界面控件。")
+            Text("录制换脸后的干净画面，不含界面控件；首次录制会请求麦克风，拒绝则只录画面。")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .cardStyle()
     }
@@ -710,7 +715,7 @@ private struct PreviewPane: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
             .tint(model.isRecording ? Theme.danger : Theme.accent)
-            .help(model.isRecording ? "停止并保存 H.264 视频（⌘R）" : "录制换脸后的干净画面（⌘R）")
+            .help(model.isRecording ? "停止并保存 H.264 视频（⌘R）" : "录制换脸后的画面与麦克风（⌘R）")
 
             Button {
                 model.chooseCaptureDirectory()

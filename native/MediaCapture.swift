@@ -37,12 +37,18 @@ final class MediaCapture {
     private let queue = DispatchQueue(label: "liveface.media-capture")
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
+    private var audioInput: AVAssetWriterInput?
     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var startHostTime: Double = 0
     private var lastPTS = CMTime.invalid
     private var outputURL: URL?
     private var videoSize = CGSize.zero
     private var recording = false
+    private(set) var audioInputAdded = false
+    private(set) var audioAppendSuccess = 0
+    private(set) var audioAppendFailure = 0
+    private(set) var audioAppendNotReady = 0
+    private(set) var audioAppendBeforeStart = 0
 
     var isRecording: Bool { recording }
     var currentURL: URL? { outputURL }
@@ -74,7 +80,7 @@ final class MediaCapture {
 
     // MARK: - 录制
 
-    func start(image: CGImage, in directory: URL) throws -> URL {
+    func start(image: CGImage, in directory: URL, withAudio: Bool = false) throws -> URL {
         guard !recording else {
             return outputURL ?? directory.appendingPathComponent("LiveFace.mp4")
         }
@@ -132,19 +138,42 @@ final class MediaCapture {
             sourcePixelBufferAttributes: attrs
         )
 
+        var audioInput: AVAssetWriterInput?
+        if withAudio {
+            let audioSettings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 48_000,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderBitRateKey: 128_000
+            ]
+            let candidate = AVAssetWriterInput(
+                mediaType: .audio, outputSettings: audioSettings
+            )
+            candidate.expectsMediaDataInRealTime = true
+            if writer.canAdd(candidate) {
+                writer.add(candidate)
+                audioInput = candidate
+                audioInputAdded = true
+            }
+        }
+
+        let startHostTime = CACurrentMediaTime()
         guard writer.startWriting() else {
             throw MediaCaptureError.cannotStartWriter(
                 writer.error?.localizedDescription ?? "startWriting 失败"
             )
         }
-        writer.startSession(atSourceTime: .zero)
+        writer.startSession(
+            atSourceTime: CMTime(seconds: startHostTime, preferredTimescale: 600)
+        )
 
         self.writer = writer
         self.input = input
+        self.audioInput = audioInput
         self.adaptor = adaptor
         self.outputURL = url
         self.videoSize = CGSize(width: width, height: height)
-        self.startHostTime = CACurrentMediaTime()
+        self.startHostTime = startHostTime
         self.lastPTS = .invalid
         self.recording = true
         return url
@@ -156,15 +185,33 @@ final class MediaCapture {
         guard input.isReadyForMoreMediaData else { return }
         guard let buffer = makePixelBuffer(from: image, adaptor: adaptor) else { return }
 
-        var pts = CMTime(
-            seconds: max(0, hostTime - startHostTime),
-            preferredTimescale: 600
-        )
+        guard hostTime >= startHostTime else { return }
+        var pts = CMTime(seconds: hostTime, preferredTimescale: 600)
         if lastPTS.isValid && CMTimeCompare(pts, lastPTS) <= 0 {
             pts = CMTimeAdd(lastPTS, CMTime(value: 1, timescale: 600))
         }
         if adaptor.append(buffer, withPresentationTime: pts) {
             lastPTS = pts
+        }
+    }
+
+    /// 音频使用采集器原始 PTS（host clock），与视频共用同一个 session 起点。
+    func appendAudio(_ sampleBuffer: CMSampleBuffer) {
+        guard recording, let audioInput else { return }
+        guard audioInput.isReadyForMoreMediaData else {
+            audioAppendNotReady += 1
+            return
+        }
+        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let start = CMTime(seconds: startHostTime, preferredTimescale: 600)
+        if CMTimeCompare(pts, start) < 0 {
+            audioAppendBeforeStart += 1
+            return
+        }
+        if audioInput.append(sampleBuffer) {
+            audioAppendSuccess += 1
+        } else {
+            audioAppendFailure += 1
         }
     }
 
@@ -175,8 +222,10 @@ final class MediaCapture {
         }
         recording = false
         input.markAsFinished()
+        audioInput?.markAsFinished()
         self.writer = nil
         self.input = nil
+        self.audioInput = nil
         self.adaptor = nil
         self.outputURL = nil
 
@@ -199,8 +248,10 @@ final class MediaCapture {
         guard recording, let writer, let input, let url = outputURL else { return nil }
         recording = false
         input.markAsFinished()
+        audioInput?.markAsFinished()
         self.writer = nil
         self.input = nil
+        self.audioInput = nil
         self.adaptor = nil
         self.outputURL = nil
 
