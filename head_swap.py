@@ -248,8 +248,18 @@ def apply_head_transfer(
     head_alpha: np.ndarray,
     head_kps: np.ndarray,
     target_face: Any,
+    strength: float = 1.0,
+    scale: float = 1.0,
+    offset_y_ratio: float = 0.0,
 ) -> np.ndarray:
-    """Composite the source head ring onto frame, keeping the target face."""
+    """Composite the source head ring onto frame, keeping the target face.
+
+    strength  0..1  overall head-transfer opacity (0 = face-only result)
+    scale     0.8..1.2  scale around the target face centre
+    offset_y_ratio -0.2..0.2  vertical offset relative to target face height
+    """
+    if strength <= 0.0:
+        return frame
     tgt_kps = _face_kps(target_face)
     bbox = _bbox(target_face)
     if tgt_kps is None or bbox is None or head_img is None or head_alpha is None:
@@ -270,6 +280,27 @@ def apply_head_transfer(
             matrix = None
     if matrix is None or not np.isfinite(matrix).all():
         return frame
+
+    bbox_tmp = _bbox(target_face)
+    if bbox_tmp is None:
+        return frame
+    tx1, ty1, tx2, ty2 = [float(v) for v in bbox_tmp]
+    fw_tmp = max(1.0, tx2 - tx1)
+    fh_tmp = max(1.0, ty2 - ty1)
+    tcx = (tx1 + tx2) / 2.0
+    tcy = (ty1 + ty2) / 2.0
+
+    if abs(scale - 1.0) > 1e-4:
+        m3 = np.vstack([matrix, [0.0, 0.0, 1.0]])
+        s3 = np.array(
+            [[scale, 0.0, tcx * (1.0 - scale)],
+             [0.0, scale, tcy * (1.0 - scale)],
+             [0.0, 0.0, 1.0]],
+            dtype=np.float64,
+        )
+        matrix = (s3 @ m3)[:2, :]
+    if abs(offset_y_ratio) > 1e-4:
+        matrix[1, 2] += float(offset_y_ratio) * fh_tmp
 
     h, w = frame.shape[:2]
     warped = cv2.warpAffine(
@@ -298,7 +329,10 @@ def apply_head_transfer(
     face_hole = _ellipse_mask(
         (h, w), (cx, cy), (0.60 * fw, 0.58 * fh), blur=0.014
     )
-    alpha = np.clip(warped_alpha * head_region * (1.0 - face_hole), 0.0, 1.0)
+    alpha = np.clip(
+        warped_alpha * head_region * (1.0 - face_hole) * float(strength),
+        0.0, 1.0,
+    )
     alpha = cv2.GaussianBlur(alpha, (0, 0), max(1.0, 0.004 * min(h, w)))
     if float(alpha.max()) < 0.02:
         return frame

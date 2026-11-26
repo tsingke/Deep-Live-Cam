@@ -270,6 +270,15 @@ final class BackendClient: ObservableObject {
         postJSON("api/config", ["head_swap": value])
     }
 
+    func setHeadParameters(strength: Int? = nil, scale: Int? = nil, offsetY: Int? = nil) {
+        var body: [String: Any] = [:]
+        if let strength { body["head_strength"] = strength }
+        if let scale { body["head_scale"] = scale }
+        if let offsetY { body["head_offset_y"] = offsetY }
+        guard !body.isEmpty else { return }
+        postJSON("api/config", body)
+    }
+
     func selectTarget(x: Double, y: Double, completion: @escaping (Bool, String?) -> Void) {
         var comps = URLComponents(
             url: BackendClient.baseURL.appendingPathComponent("api/target"),

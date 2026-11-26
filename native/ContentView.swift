@@ -346,6 +346,68 @@ private struct SidebarView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            if model.headSwap {
+                VStack(spacing: 7) {
+                    HStack {
+                        Text("换头强度").font(.system(size: 12))
+                        Spacer()
+                        Text("\(model.headStrength)%")
+                            .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(Theme.cyan)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(model.headStrength) },
+                            set: { model.setHeadStrength(Int($0.rounded())) }
+                        ),
+                        in: 0...100, step: 5
+                    )
+                    .tint(Theme.accent)
+
+                    HStack {
+                        Text("头部缩放").font(.system(size: 12))
+                        Spacer()
+                        Text("\(model.headScale)%")
+                            .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(Theme.cyan)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(model.headScale) },
+                            set: { model.setHeadScale(Int($0.rounded())) }
+                        ),
+                        in: 85...115, step: 1
+                    )
+                    .tint(Theme.accent)
+
+                    HStack {
+                        Text("上下微调").font(.system(size: 12))
+                        Spacer()
+                        Text(model.headOffsetY == 0
+                             ? "0%"
+                             : (model.headOffsetY > 0
+                                ? "+\(model.headOffsetY)%"
+                                : "\(model.headOffsetY)%"))
+                            .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(Theme.cyan)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(model.headOffsetY) },
+                            set: { model.setHeadOffsetY(Int($0.rounded())) }
+                        ),
+                        in: -20...20, step: 1
+                    )
+                    .tint(Theme.accent)
+                }
+                .padding(.top, 2)
+
+                Text("强度 0 = 仅换脸；缩放/上下微调可减少接缝。")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack(alignment: .firstTextBaseline) {
                 Text("点击画面中的人脸可锁定主角")
                     .font(.system(size: 10.5))

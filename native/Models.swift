@@ -12,6 +12,9 @@ struct ServerSettings: Codable {
     var jpeg_quality: Int
     var swap_count: Int
     var head_swap: Bool?
+    var head_strength: Int?
+    var head_scale: Int?
+    var head_offset_y: Int?
 }
 
 struct WarmupInfo: Codable {

@@ -21,6 +21,9 @@ final class AppModel: ObservableObject {
     @Published var detectInterval = 3
     @Published var swapCount = 1
     @Published var headSwap = false
+    @Published var headStrength = 90
+    @Published var headScale = 100
+    @Published var headOffsetY = 0
     @Published var captureDirectory: URL = AppModel.defaultCaptureDirectory()
     @Published var isRecording = false
     @Published var recordSeconds = 0
@@ -53,6 +56,7 @@ final class AppModel: ObservableObject {
     private var cameraAutoStarted = false
     private var toastWorkItem: DispatchWorkItem?
     private var headSwapDirty = false
+    private var headParamsInitialized = false
     private let mediaCapture = MediaCapture()
     private var recordStartedAt: Date?
 
@@ -134,6 +138,12 @@ final class AppModel: ObservableObject {
                     } else if serverHead != self.headSwap {
                         self.headSwap = serverHead
                     }
+                }
+                if !self.headParamsInitialized {
+                    self.headParamsInitialized = true
+                    if let value = state.settings.head_strength { self.headStrength = value }
+                    if let value = state.settings.head_scale { self.headScale = value }
+                    if let value = state.settings.head_offset_y { self.headOffsetY = value }
                 }
                 if state.ready, self.pendingStart {
                     self.pendingStart = false
@@ -327,6 +337,27 @@ final class AppModel: ObservableObject {
         flash(enabled
               ? "换头已开启（实验）：叠加源发型与头部轮廓"
               : "已切回换脸：只替换面部")
+    }
+
+    func setHeadStrength(_ value: Int) {
+        let v = min(100, max(0, value))
+        guard v != headStrength else { return }
+        headStrength = v
+        backend.setHeadParameters(strength: v)
+    }
+
+    func setHeadScale(_ value: Int) {
+        let v = min(115, max(85, value))
+        guard v != headScale else { return }
+        headScale = v
+        backend.setHeadParameters(scale: v)
+    }
+
+    func setHeadOffsetY(_ value: Int) {
+        let v = min(20, max(-20, value))
+        guard v != headOffsetY else { return }
+        headOffsetY = v
+        backend.setHeadParameters(offsetY: v)
     }
 
     /// 点击画面中的脸：x/y 为相对画面内容的 0–1 坐标。
