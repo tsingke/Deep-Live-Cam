@@ -20,6 +20,7 @@ struct ServerSettings: Codable {
     var head_strength: Int?
     var head_scale: Int?
     var head_offset_y: Int?
+    var head_offset_x: Int?
 }
 
 struct WarmupInfo: Codable {

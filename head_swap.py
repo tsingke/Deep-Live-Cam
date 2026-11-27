@@ -251,6 +251,7 @@ def apply_head_transfer(
     strength: float = 1.0,
     scale: float = 1.0,
     offset_y_ratio: float = 0.0,
+    offset_x_ratio: float = 0.0,
 ) -> np.ndarray:
     """Composite the source head ring onto frame, keeping the target face.
 
@@ -301,6 +302,8 @@ def apply_head_transfer(
         matrix = (s3 @ m3)[:2, :]
     if abs(offset_y_ratio) > 1e-4:
         matrix[1, 2] += float(offset_y_ratio) * fh_tmp
+    if abs(offset_x_ratio) > 1e-4:
+        matrix[0, 2] += float(offset_x_ratio) * fw_tmp
 
     h, w = frame.shape[:2]
     warped = cv2.warpAffine(

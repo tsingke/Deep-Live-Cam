@@ -99,6 +99,7 @@ DEFAULT_HEAD_SWAP = False
 DEFAULT_HEAD_STRENGTH = 90   # 0..100
 DEFAULT_HEAD_SCALE = 100     # 85..115
 DEFAULT_HEAD_OFFSET_Y = 0    # -20..20 (% of target face height)
+DEFAULT_HEAD_OFFSET_X = 0    # -20..20 (% of target face width)
 MAX_FRAME_BYTES = 8 * 1024 * 1024
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_WORKERS = 2               # 同时处理的最大帧数
@@ -216,6 +217,7 @@ class Engine:
         self.head_strength = DEFAULT_HEAD_STRENGTH
         self.head_scale = DEFAULT_HEAD_SCALE
         self.head_offset_y = DEFAULT_HEAD_OFFSET_Y
+        self.head_offset_x = DEFAULT_HEAD_OFFSET_X
         self.detect_warm_ms: Optional[float] = None
         self.swap_warm_ms: Optional[float] = None
         self._swap_warming = threading.Event()
@@ -779,6 +781,7 @@ class Engine:
                                 strength=self.head_strength / 100.0,
                                 scale=self.head_scale / 100.0,
                                 offset_y_ratio=self.head_offset_y / 100.0,
+                                offset_x_ratio=self.head_offset_x / 100.0,
                             )
                 except Exception:
                     log.exception("换头融合失败（本帧保留换脸结果）")
@@ -993,6 +996,7 @@ async def api_state(request) -> Any:
             "head_strength": eng.head_strength,
             "head_scale": eng.head_scale,
             "head_offset_y": eng.head_offset_y,
+            "head_offset_x": eng.head_offset_x,
         },
         "warmup": {
             "detect_ms": round(eng.detect_warm_ms, 1) if eng.detect_warm_ms else None,
@@ -1135,6 +1139,11 @@ async def api_config(request) -> Any:
             eng.head_offset_y = max(-20, min(20, int(body["head_offset_y"])))
         except Exception:
             pass
+    if "head_offset_x" in body:
+        try:
+            eng.head_offset_x = max(-20, min(20, int(body["head_offset_x"])))
+        except Exception:
+            pass
     _save_json(
         CONFIG_FILE,
         {
@@ -1145,6 +1154,7 @@ async def api_config(request) -> Any:
             "head_strength": eng.head_strength,
             "head_scale": eng.head_scale,
             "head_offset_y": eng.head_offset_y,
+            "head_offset_x": eng.head_offset_x,
         },
     )
     request.app["last_activity"] = time.time()
@@ -1158,6 +1168,7 @@ async def api_config(request) -> Any:
             "head_strength": eng.head_strength,
             "head_scale": eng.head_scale,
             "head_offset_y": eng.head_offset_y,
+            "head_offset_x": eng.head_offset_x,
         }
     )
 
@@ -1330,6 +1341,7 @@ def create_app(idle_timeout: int = 7200) -> Any:
     eng.head_strength = max(0, min(100, int(cfg.get("head_strength", DEFAULT_HEAD_STRENGTH))))
     eng.head_scale = max(85, min(115, int(cfg.get("head_scale", DEFAULT_HEAD_SCALE))))
     eng.head_offset_y = max(-20, min(20, int(cfg.get("head_offset_y", DEFAULT_HEAD_OFFSET_Y))))
+    eng.head_offset_x = max(-20, min(20, int(cfg.get("head_offset_x", DEFAULT_HEAD_OFFSET_X))))
 
     # 帧请求约 100–400KB；上传是多文件 multipart，单独限制每个文件 20MB。
     app = web.Application(client_max_size=128 * 1024 * 1024)

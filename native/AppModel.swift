@@ -24,6 +24,10 @@ final class AppModel: ObservableObject {
     @Published var headStrength = 90
     @Published var headScale = 100
     @Published var headOffsetY = 0
+    @Published var headOffsetX = 0
+    @Published var maxRecordingMinutes = 0 {
+        didSet { UserDefaults.standard.set(maxRecordingMinutes, forKey: "lf_max_record_minutes") }
+    }
     @Published var selectedCameraID = ""
     @Published var selectedMicrophoneID = ""
     @Published var cameraDevices: [CaptureDevice] = []
@@ -118,6 +122,8 @@ final class AppModel: ObservableObject {
         if UserDefaults.standard.object(forKey: "lf_record_mic") != nil {
             recordMicrophone = UserDefaults.standard.bool(forKey: "lf_record_mic")
         }
+        let savedMax = UserDefaults.standard.integer(forKey: "lf_max_record_minutes")
+        if [1, 5, 10, 30].contains(savedMax) { maxRecordingMinutes = savedMax }
         camera.backend = backend
         camera.updateSettings(delayMs: delayMs, qualityPct: qualityPct)
         audioCapture.onSample = { [weak self] sampleBuffer in
@@ -202,6 +208,7 @@ final class AppModel: ObservableObject {
                     if let value = state.settings.head_strength { self.headStrength = value }
                     if let value = state.settings.head_scale { self.headScale = value }
                     if let value = state.settings.head_offset_y { self.headOffsetY = value }
+                    if let value = state.settings.head_offset_x { self.headOffsetX = value }
                 }
                 if state.ready, self.pendingStart {
                     self.pendingStart = false
@@ -338,7 +345,13 @@ final class AppModel: ObservableObject {
     private func tickMetrics() {
         let now = CACurrentMediaTime()
         if isRecording, let started = recordStartedAt {
-            recordSeconds = max(0, Int(Date().timeIntervalSince(started)))
+            let elapsed = Date().timeIntervalSince(started)
+            recordSeconds = max(0, Int(elapsed))
+            if maxRecordingMinutes > 0,
+               elapsed >= Double(maxRecordingMinutes * 60) {
+                stopRecording()
+                flash("已达到最长录制时长，已保存")
+            }
         }
         shownTimes.removeAll { now - $0 > 2 }
         fps = Double(shownTimes.count) / 2.0
@@ -467,6 +480,13 @@ final class AppModel: ObservableObject {
         backend.setHeadParameters(offsetY: v)
     }
 
+    func setHeadOffsetX(_ value: Int) {
+        let v = min(20, max(-20, value))
+        guard v != headOffsetX else { return }
+        headOffsetX = v
+        backend.setHeadParameters(offsetX: v)
+    }
+
     func applyHeadPreset(_ preset: HeadPreset) {
         let values: (Int, Int, Int)
         let name: String
@@ -484,8 +504,9 @@ final class AppModel: ObservableObject {
         headStrength = values.0
         headScale = values.1
         headOffsetY = values.2
+        headOffsetX = 0
         backend.setHeadParameters(
-            strength: values.0, scale: values.1, offsetY: values.2
+            strength: values.0, scale: values.1, offsetY: values.2, offsetX: 0
         )
         flash("换头预设：\(name)")
     }

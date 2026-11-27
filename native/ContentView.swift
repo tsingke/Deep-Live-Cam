@@ -412,6 +412,26 @@ private struct SidebarView: View {
                         in: -20...20, step: 1
                     )
                     .tint(Theme.accent)
+
+                    HStack {
+                        Text("左右微调").font(.system(size: 12))
+                        Spacer()
+                        Text(model.headOffsetX == 0
+                             ? "0%"
+                             : (model.headOffsetX > 0
+                                ? "+\(model.headOffsetX)%"
+                                : "\(model.headOffsetX)%"))
+                            .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(Theme.cyan)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { Double(model.headOffsetX) },
+                            set: { model.setHeadOffsetX(Int($0.rounded())) }
+                        ),
+                        in: -20...20, step: 1
+                    )
+                    .tint(Theme.accent)
                 }
                 .padding(.top, 2)
 
@@ -570,6 +590,23 @@ private struct SidebarView: View {
                     Text("4 Mbps").tag(4)
                     Text("8 Mbps").tag(8)
                     Text("12 Mbps").tag(12)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 96)
+                .disabled(model.isRecording)
+            }
+
+            HStack {
+                Text("最长录制").font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Picker("", selection: $model.maxRecordingMinutes) {
+                    Text("不限").tag(0)
+                    Text("1 分钟").tag(1)
+                    Text("5 分钟").tag(5)
+                    Text("10 分钟").tag(10)
+                    Text("30 分钟").tag(30)
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
