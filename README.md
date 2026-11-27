@@ -265,6 +265,10 @@ tsingke/Deep-Live-Cam/
 | 端口被占用 | 已有服务在运行；退出旧实例或 `pkill -f web_server.py` 后重启 App |
 | 想手动启动 | `.venv/bin/python web_server.py --port 8787` |
 
+## 开发与交接
+
+架构、接口、构建/截图流程、当前状态、已知限制与下一步见 [`docs/HANDOFF.md`](docs/HANDOFF.md)。
+
 ## 合规提醒
 
 实时换脸属于双重用途技术。请仅用于**本人形象、已获授权的人物**或明确标注的娱乐内容；
