@@ -57,8 +57,8 @@ App 的 Bundle ID：`local.liveface.studio`
 
 **快照（本交接文档写入前的最新功能提交）**
 
-- App：`31441b3` — `feat: pause and resume recording in a single file`
-- Fork：`85a165b` — 同上
+- App：`a235617` — `test: add head-transfer and recording smoke tests`
+- Fork：`7094cc0` — 同上
 - 交接文档本身会有一次后续 commit；以 `git log -1` 为准。
 
 **重要维护约定**
@@ -150,6 +150,9 @@ App 预览（固定延迟上屏）
 | `docs/ui-settings.png` | 设置窗口截图（换头 tab） |
 | `docs/pipeline.png` | 端到端链路图 |
 | `docs/HANDOFF.md` | 本文件 |
+| `tests/test_head_swap.py` | 换头纯逻辑单元测试（无模型/无人物） |
+| `tests/recording_smoke/main.swift` | 合成视频/音频 + 暂停的录制 smoke |
+| `tests/run_recording_smoke.sh` | 编译并运行录制 smoke |
 
 ---
 
@@ -318,6 +321,17 @@ python3.12 -m venv .venv
 | `--demo` | 需要 `test_assets/target_face.jpg`；该素材已清理，**当前不可用** |
 | `--output` | 仅 demo 模式自动打开输出窗口 |
 
+### 自动化测试
+
+```bash
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+./tests/run_recording_smoke.sh
+```
+
+- `test_head_swap`：只测合成图/假 landmarks，不加载模型、不读人物素材。
+- `recording_smoke`：合成帧 + 合成音频 + 暂停/继续；断言 1 视频轨、1 音频轨、暂停段被移除。
+- 尚未覆盖：真实摄像头/麦克风、完整 API、UI 截图回归。
+
 ### 隐私安全截图流程（重要）
 
 不要直接截带用户照片的主窗口。使用**临时空照片库项目**：
@@ -388,9 +402,9 @@ codesign --force --deep --sign - "$TMP/LiveFaceShot.app"
 - 换头是**实验性 2D 头型/发型融合**，不是 3D 生成式整头替换；侧脸/光线差异大时有接缝。
 - 录制暂停/继续已支持（单文件、无暂停空洞）；视频源固定 720p；音频可选但无增益/降噪。
 - `--demo` 依赖的测试素材已清理，当前不可用。
-- 主界面 `ContentView.swift` 里仍保留旧侧栏的 `captureSection`/`devicesSection`/`statsSection`/`obsSection` 私有实现（已不被主界面调用）；可在后续清理，注意不要破坏 SettingsView。
+- 旧侧栏的 `captureSection`/`devicesSection`/`statsSection`/`obsSection` 已从 `ContentView` 清理；设置项保留在 `SettingsView`。
 - 公开 fork 历史仍包含上游演示媒体；当前树已清理。
-- 无自动化测试；验证以手动 + 构建 + 合成音视频帧为主。
+- 已有 head_swap 单元测试与录制 smoke；尚无真实摄像头/API/UI 的完整集成测试。
 - `MediaCapture` 使用 macOS 27 中已弃用的 AVAssetWriter 输入 API；目标 macOS 14，构建有弃用警告但不影响。
 - 设置以 sheet 呈现，不是独立 Preferences 窗口；已支持 `⌘,`。
 - 窗口位置重置在下次启动生效。
@@ -398,12 +412,11 @@ codesign --force --deep --sign - "$TMP/LiveFaceShot.app"
 ## 11. 下一步建议（按优先级）
 
 1. **真正整头替换模型**：接入专用 head-swap/portrait 模型；需要新的模型下载、性能评估和许可审查。
-2. **自动化测试**：服务端帧协议、目标锁定、截图/录制文件轨、暂停/继续、设备枚举。
-3. **清理旧代码**：移除 `ContentView` 中不再使用的侧栏 section；保留 `SettingsView`。
-4. **设置搜索/收藏**：设置项增多后可加搜索。
-5. **独立 Preferences 窗口**：替代 sheet；保持 `⌘,`。
-6. **打包/签名**：Developer ID、notarization、独立 App 分发。
-7. **历史清理**：filter-repo 清除公开 fork 的上游媒体历史（需用户确认）。
+2. **完整集成测试**：真实摄像头/麦克风、服务端帧协议、目标锁定、设备枚举、UI 回归。
+3. **设置搜索/收藏**：设置项增多后可加搜索。
+4. **独立 Preferences 窗口**：替代 sheet；保持 `⌘,`。
+5. **打包/签名**：Developer ID、notarization、独立 App 分发。
+6. **历史清理**：filter-repo 清除公开 fork 的上游媒体历史（需用户确认）。
 
 ---
 

@@ -270,6 +270,13 @@ tsingke/Deep-Live-Cam/
 
 架构、接口、构建/截图流程、当前状态、已知限制与下一步见 [`docs/HANDOFF.md`](docs/HANDOFF.md)。
 
+测试：
+
+```bash
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+./tests/run_recording_smoke.sh
+```
+
 ## 合规提醒
 
 实时换脸属于双重用途技术。请仅用于**本人形象、已获授权的人物**或明确标注的娱乐内容；
