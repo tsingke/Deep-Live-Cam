@@ -277,6 +277,8 @@ tsingke/Deep-Live-Cam/
 ./tests/run_recording_smoke.sh
 ```
 
+`test_server_api` 会启动隔离空照片库的真实服务（约 25s），不会读取用户素材。
+
 ## 合规提醒
 
 实时换脸属于双重用途技术。请仅用于**本人形象、已获授权的人物**或明确标注的娱乐内容；
