@@ -548,6 +548,20 @@ private struct SidebarView: View {
                 .truncationMode(.middle)
                 .help(model.captureDirectory.path)
 
+            HStack {
+                Text("录制倒计时").font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Picker("", selection: $model.recordCountdownSeconds) {
+                    Text("关闭").tag(0)
+                    Text("3 秒").tag(3)
+                    Text("5 秒").tag(5)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 96)
+            }
+
             HStack(spacing: 8) {
                 Button {
                     model.captureScreenshot()
@@ -561,8 +575,12 @@ private struct SidebarView: View {
                     model.toggleRecording()
                 } label: {
                     Label(
-                        model.isRecording ? "停止" : "录制",
-                        systemImage: model.isRecording ? "stop.fill" : "record.circle"
+                        model.recordCountdown != nil
+                        ? "取消"
+                        : (model.isRecording ? "停止" : "录制"),
+                        systemImage: model.recordCountdown != nil
+                        ? "xmark"
+                        : (model.isRecording ? "stop.fill" : "record.circle")
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -847,8 +865,12 @@ private struct PreviewPane: View {
                 model.toggleRecording()
             } label: {
                 Label(
-                    model.isRecording ? "停止" : "录制",
-                    systemImage: model.isRecording ? "stop.fill" : "record.circle"
+                    model.recordCountdown != nil
+                    ? "取消"
+                    : (model.isRecording ? "停止" : "录制"),
+                    systemImage: model.recordCountdown != nil
+                    ? "xmark"
+                    : (model.isRecording ? "stop.fill" : "record.circle")
                 )
             }
             .buttonStyle(.borderedProminent)
@@ -891,13 +913,17 @@ private struct PreviewPane: View {
             if !model.isRunning {
                 idleOverlay
             }
+
+            if let countdown = model.recordCountdown {
+                countdownOverlay(countdown)
+            }
         }
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
         .overlay {
-            if model.isRunning, let image = model.displayedImage {
+            if model.isRunning, model.recordCountdown == nil, let image = model.displayedImage {
                 GeometryReader { geo in
                     let iw = max(CGFloat(image.width), 1)
                     let ih = max(CGFloat(image.height), 1)
@@ -941,6 +967,28 @@ private struct PreviewPane: View {
         }
         .frame(minHeight: 420)
         .animation(.easeInOut(duration: 0.2), value: model.isRunning)
+    }
+
+    private func countdownOverlay(_ countdown: Int) -> some View {
+        ZStack {
+            Color.black.opacity(0.66)
+
+            VStack(spacing: 12) {
+                Text("\(countdown)")
+                    .font(.system(size: 78, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+                Text("秒后开始录制")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Button("取消") {
+                    model.cancelRecordCountdown()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private var idleOverlay: some View {

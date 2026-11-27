@@ -38,6 +38,15 @@ final class AppModel: ObservableObject {
     @Published var recordingWithAudio = false
     @Published var micLevel: Float = 0
     @Published var recordSeconds = 0
+    @Published var recordCountdown: Int?
+    @Published var recordCountdownSeconds = 0 {
+        didSet {
+            UserDefaults.standard.set(recordCountdownSeconds, forKey: "lf_record_countdown")
+            if recordCountdown != nil {
+                cancelRecordCountdown()
+            }
+        }
+    }
     @Published var lastCaptureURL: URL?
     @Published var recentCaptures: [CaptureItem] = []
     @Published var transientMessage: String?
@@ -73,6 +82,7 @@ final class AppModel: ObservableObject {
     private let audioCapture = AudioCaptureController()
     private var startingRecording = false
     private var recordStartedAt: Date?
+    private var countdownTimer: Timer?
 
     var isDemo: Bool { camera.isDemo }
 
@@ -96,6 +106,7 @@ final class AppModel: ObservableObject {
         if let saved = UserDefaults.standard.string(forKey: "lf_capture_dir"), !saved.isEmpty {
             captureDirectory = URL(fileURLWithPath: saved, isDirectory: true)
         }
+        recordCountdownSeconds = UserDefaults.standard.integer(forKey: "lf_record_countdown")
         camera.backend = backend
         camera.updateSettings(delayMs: delayMs, qualityPct: qualityPct)
         audioCapture.onSample = { [weak self] sampleBuffer in
@@ -137,6 +148,7 @@ final class AppModel: ObservableObject {
 
     func shutdown() {
         camera.stop()
+        cancelRecordCountdown()
         audioCapture.stop()
         micLevel = 0
         if isRecording {
@@ -291,6 +303,7 @@ final class AppModel: ObservableObject {
             if running { self.cameraPermissionIssue = false }
             if !running {
                 self.previewImage = nil
+                self.cancelRecordCountdown()
                 if self.isRecording { self.stopRecording() }
             }
         }
@@ -581,8 +594,57 @@ final class AppModel: ObservableObject {
     func toggleRecording() {
         if isRecording {
             stopRecording()
+            return
+        }
+        if recordCountdown != nil {
+            cancelRecordCountdown()
+            return
+        }
+        guard isRunning, displayedImage != nil else {
+            alertMessage = "开始直播后才能录制。请先点击「开始直播」。"
+            return
+        }
+        if recordCountdownSeconds > 0 {
+            beginRecordCountdown()
         } else {
             startRecording()
+        }
+    }
+
+    private func beginRecordCountdown() {
+        cancelRecordCountdown()
+        recordCountdown = recordCountdownSeconds
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] timer in
+            guard let self else {
+                timer.invalidate()
+                return
+            }
+            guard self.isRunning else {
+                timer.invalidate()
+                self.countdownTimer = nil
+                self.recordCountdown = nil
+                return
+            }
+            if let value = self.recordCountdown, value > 1 {
+                self.recordCountdown = value - 1
+            } else {
+                timer.invalidate()
+                self.countdownTimer = nil
+                self.recordCountdown = nil
+                self.startRecording()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        countdownTimer = timer
+    }
+
+    func cancelRecordCountdown() {
+        let hadCountdown = recordCountdown != nil
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        recordCountdown = nil
+        if hadCountdown {
+            flash("已取消录制倒计时")
         }
     }
 
