@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import CoreGraphics
 import CoreVideo
+import CoreMedia
 import QuartzCore
 import ImageIO
 import UniformTypeIdentifiers
@@ -44,11 +45,10 @@ final class MediaCapture {
     private var outputURL: URL?
     private var videoSize = CGSize.zero
     private var recording = false
-    private(set) var audioInputAdded = false
-    private(set) var audioAppendSuccess = 0
-    private(set) var audioAppendFailure = 0
-    private(set) var audioAppendNotReady = 0
-    private(set) var audioAppendBeforeStart = 0
+    private var paused = false
+    private var pauseStartHost: Double?
+    private var pausedTotal: Double = 0
+    private var minHostTime: Double = 0
 
     var isRecording: Bool { recording }
     var currentURL: URL? { outputURL }
@@ -158,7 +158,6 @@ final class MediaCapture {
             if writer.canAdd(candidate) {
                 writer.add(candidate)
                 audioInput = candidate
-                audioInputAdded = true
             }
         }
 
@@ -180,18 +179,42 @@ final class MediaCapture {
         self.videoSize = CGSize(width: width, height: height)
         self.startHostTime = startHostTime
         self.lastPTS = .invalid
+        self.paused = false
+        self.pauseStartHost = nil
+        self.pausedTotal = 0
+        self.minHostTime = startHostTime
         self.recording = true
         return url
     }
 
+    var isPaused: Bool { paused }
+
+    func pause(at hostTime: Double) {
+        guard recording, !paused else { return }
+        paused = true
+        pauseStartHost = hostTime
+        minHostTime = hostTime
+    }
+
+    func resume(at hostTime: Double) {
+        guard recording, paused else { return }
+        let start = pauseStartHost ?? hostTime
+        pausedTotal += max(0, hostTime - start)
+        paused = false
+        pauseStartHost = nil
+        minHostTime = hostTime
+    }
+
     /// hostTime 使用 CACurrentMediaTime()，与摄像头/显示时间同一时钟。
     func append(image: CGImage, hostTime: Double) {
-        guard recording, let input, let adaptor else { return }
+        guard recording, !paused, let input, let adaptor else { return }
         guard input.isReadyForMoreMediaData else { return }
+        guard hostTime >= minHostTime else { return }
         guard let buffer = makePixelBuffer(from: image, adaptor: adaptor) else { return }
 
-        guard hostTime >= startHostTime else { return }
-        var pts = CMTime(seconds: hostTime, preferredTimescale: 600)
+        let adjusted = hostTime - pausedTotal
+        guard adjusted >= startHostTime else { return }
+        var pts = CMTime(seconds: adjusted, preferredTimescale: 600)
         if lastPTS.isValid && CMTimeCompare(pts, lastPTS) <= 0 {
             pts = CMTimeAdd(lastPTS, CMTime(value: 1, timescale: 600))
         }
@@ -202,22 +225,23 @@ final class MediaCapture {
 
     /// 音频使用采集器原始 PTS（host clock），与视频共用同一个 session 起点。
     func appendAudio(_ sampleBuffer: CMSampleBuffer) {
-        guard recording, let audioInput else { return }
-        guard audioInput.isReadyForMoreMediaData else {
-            audioAppendNotReady += 1
-            return
+        guard recording, !paused, let audioInput else { return }
+        guard audioInput.isReadyForMoreMediaData else { return }
+        let raw = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let rawSeconds = CMTimeGetSeconds(raw)
+        guard rawSeconds.isFinite, rawSeconds >= minHostTime else { return }
+        let adjustedSeconds = rawSeconds - pausedTotal
+        guard adjustedSeconds >= startHostTime else { return }
+
+        if pausedTotal > 0 {
+            let status = CMSampleBufferSetOutputPresentationTimeStamp(
+                sampleBuffer,
+                newValue: CMTime(seconds: adjustedSeconds, preferredTimescale: 600)
+            )
+            guard status == noErr else { return }
         }
-        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        let start = CMTime(seconds: startHostTime, preferredTimescale: 600)
-        if CMTimeCompare(pts, start) < 0 {
-            audioAppendBeforeStart += 1
-            return
-        }
-        if audioInput.append(sampleBuffer) {
-            audioAppendSuccess += 1
-        } else {
-            audioAppendFailure += 1
-        }
+
+        audioInput.append(sampleBuffer)
     }
 
     func finish(completion: @escaping (Result<URL, Error>) -> Void) {
@@ -226,6 +250,9 @@ final class MediaCapture {
             return
         }
         recording = false
+        paused = false
+        pauseStartHost = nil
+        pausedTotal = 0
         input.markAsFinished()
         audioInput?.markAsFinished()
         self.writer = nil
@@ -252,6 +279,9 @@ final class MediaCapture {
     func finishSynchronously() -> URL? {
         guard recording, let writer, let input, let url = outputURL else { return nil }
         recording = false
+        paused = false
+        pauseStartHost = nil
+        pausedTotal = 0
         input.markAsFinished()
         audioInput?.markAsFinished()
         self.writer = nil

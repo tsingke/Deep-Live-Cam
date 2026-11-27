@@ -46,6 +46,7 @@ final class AppModel: ObservableObject {
     }
     @Published var isRecording = false
     @Published var recordingWithAudio = false
+    @Published var isRecordingPaused = false
     @Published var micLevel: Float = 0
     @Published var recordSeconds = 0
     @Published var recordCountdown: Int?
@@ -98,6 +99,8 @@ final class AppModel: ObservableObject {
     private let audioCapture = AudioCaptureController()
     private var startingRecording = false
     private var recordStartedAt: Date?
+    private var recordPauseStart: Date?
+    private var recordPausedTotal: TimeInterval = 0
     private var countdownTimer: Timer?
 
     var isDemo: Bool { camera.isDemo }
@@ -354,8 +357,12 @@ final class AppModel: ObservableObject {
     private func tickMetrics() {
         let now = CACurrentMediaTime()
         if isRecording, let started = recordStartedAt {
-            let elapsed = Date().timeIntervalSince(started)
-            recordSeconds = max(0, Int(elapsed))
+            var elapsed = Date().timeIntervalSince(started) - recordPausedTotal
+            if isRecordingPaused, let pauseStart = recordPauseStart {
+                elapsed -= Date().timeIntervalSince(pauseStart)
+            }
+            elapsed = max(0, elapsed)
+            recordSeconds = Int(elapsed)
             if maxRecordingMinutes > 0,
                elapsed >= Double(maxRecordingMinutes * 60) {
                 stopRecording()
@@ -685,6 +692,39 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func toggleRecordingPause() {
+        guard isRecording else { return }
+        if isRecordingPaused {
+            resumeRecording()
+        } else {
+            pauseRecording()
+        }
+    }
+
+    private func pauseRecording() {
+        guard isRecording, !isRecordingPaused else { return }
+        isRecordingPaused = true
+        recordPauseStart = Date()
+        micLevel = 0
+        mediaCapture.pause(at: CACurrentMediaTime())
+        audioCapture.stop()
+        flash("录制已暂停")
+    }
+
+    private func resumeRecording() {
+        guard isRecording, isRecordingPaused else { return }
+        isRecordingPaused = false
+        if let pauseStart = recordPauseStart {
+            recordPausedTotal += Date().timeIntervalSince(pauseStart)
+        }
+        recordPauseStart = nil
+        mediaCapture.resume(at: CACurrentMediaTime())
+        if recordingWithAudio {
+            audioCapture.start { _ in }
+        }
+        flash("录制已继续")
+    }
+
     private func beginRecordCountdown() {
         cancelRecordCountdown()
         recordCountdown = recordCountdownSeconds
@@ -747,8 +787,11 @@ final class AppModel: ObservableObject {
                 )
                 self.recordingWithAudio = withAudio
                 self.isRecording = true
+                self.isRecordingPaused = false
                 self.micLevel = 0
                 self.recordStartedAt = Date()
+                self.recordPauseStart = nil
+                self.recordPausedTotal = 0
                 self.recordSeconds = 0
                 self.lastCaptureURL = url
                 self.flash(
@@ -788,9 +831,12 @@ final class AppModel: ObservableObject {
     func stopRecording() {
         guard isRecording else { return }
         isRecording = false
+        isRecordingPaused = false
         recordingWithAudio = false
         micLevel = 0
         recordStartedAt = nil
+        recordPauseStart = nil
+        recordPausedTotal = 0
         audioCapture.stop()
         mediaCapture.finish { [weak self] result in
             guard let self else { return }
@@ -837,6 +883,10 @@ final class AppModel: ObservableObject {
                 }
                 if key == "r" {
                     self.toggleRecording()
+                    return nil
+                }
+                if key == "p" {
+                    self.toggleRecordingPause()
                     return nil
                 }
             }

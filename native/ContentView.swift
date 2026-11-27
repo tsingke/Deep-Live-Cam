@@ -556,6 +556,19 @@ private struct SidebarView: View {
                 }
                 .buttonStyle(.bordered)
 
+                if model.isRecording {
+                    Button {
+                        model.toggleRecordingPause()
+                    } label: {
+                        Label(
+                            model.isRecordingPaused ? "继续" : "暂停",
+                            systemImage: model.isRecordingPaused ? "play.fill" : "pause.fill"
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+
                 Button {
                     model.toggleRecording()
                 } label: {
@@ -830,15 +843,17 @@ private struct PreviewPane: View {
 
             if model.isRecording {
                 HStack(spacing: 5) {
-                    Circle().fill(Theme.danger).frame(width: 6, height: 6)
-                    Text("REC \(model.recordTimeText)")
+                    Circle()
+                        .fill(model.isRecordingPaused ? Color.orange : Theme.danger)
+                        .frame(width: 6, height: 6)
+                    Text((model.isRecordingPaused ? "PAUSED " : "REC ") + model.recordTimeText)
                         .font(.system(size: 9, weight: .bold).monospacedDigit())
-                        .foregroundStyle(Theme.danger)
+                        .foregroundStyle(model.isRecordingPaused ? Color.orange : Theme.danger)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(Capsule().fill(Theme.danger.opacity(0.12)))
-                .overlay(Capsule().stroke(Theme.danger.opacity(0.35), lineWidth: 1))
+                .background(Capsule().fill((model.isRecordingPaused ? Color.orange : Theme.danger).opacity(0.12)))
+                .overlay(Capsule().stroke((model.isRecordingPaused ? Color.orange : Theme.danger).opacity(0.35), lineWidth: 1))
 
                 MicLevelIndicator(level: model.micLevel, active: model.recordingWithAudio)
             }
@@ -870,6 +885,17 @@ private struct PreviewPane: View {
             .controlSize(.small)
             .tint(model.isRecording ? Theme.danger : Theme.accent)
             .help(model.isRecording ? "停止并保存 H.264 视频（⌘R）" : "录制换脸后的画面与麦克风（⌘R）")
+
+            if model.isRecording {
+                Button {
+                    model.toggleRecordingPause()
+                } label: {
+                    Image(systemName: model.isRecordingPaused ? "play.fill" : "pause.fill")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(model.isRecordingPaused ? "继续录制（⌘P）" : "暂停录制（⌘P）")
+            }
 
             Button {
                 model.chooseCaptureDirectory()
@@ -1061,7 +1087,7 @@ private struct PreviewPane: View {
             footerItem("固定延迟", "\(Int(model.delayMs)) ms")
             footerItem("当前人物", activePhotoName)
             Spacer()
-            Text("空格 开始/停止 · 1–9 换人 · ⌘S 截图 · ⌘R 录制")
+            Text("空格 开始/停止 · 1–9 换人 · ⌘S 截图 · ⌘R 录制 · ⌘P 暂停")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
         }

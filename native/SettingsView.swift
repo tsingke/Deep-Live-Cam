@@ -212,6 +212,11 @@ struct SettingsView: View {
             Section("快捷操作") {
                 HStack {
                     Button("截图") { model.captureScreenshot() }
+                    if model.isRecording {
+                        Button(model.isRecordingPaused ? "继续录制" : "暂停录制") {
+                            model.toggleRecordingPause()
+                        }
+                    }
                     Button(model.isRecording ? "停止录制" : "开始录制") {
                         model.toggleRecording()
                     }
@@ -393,6 +398,7 @@ struct SettingsView: View {
                 shortcut("1–9", "切换照片")
                 shortcut("⌘S", "截图")
                 shortcut("⌘R", "开始 / 停止录制")
+                shortcut("⌘P", "暂停 / 继续录制")
                 shortcut("⌘⇧O", "打开输出窗口")
                 shortcut("⌘,", "打开设置")
                 shortcut("F / Esc", "输出窗口全屏 / 关闭")

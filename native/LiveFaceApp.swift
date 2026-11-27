@@ -178,6 +178,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         record.keyEquivalentModifierMask = [.command]
         record.target = self
 
+        let pause = liveMenu.addItem(
+            withTitle: "暂停 / 继续录制",
+            action: #selector(toggleRecordingPause),
+            keyEquivalent: "p"
+        )
+        pause.keyEquivalentModifierMask = [.command]
+        pause.target = self
+
         liveMenu.addItem(.separator())
         let chooseDir = liveMenu.addItem(
             withTitle: "选择保存目录…",
@@ -205,6 +213,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleRecording() {
         model.toggleRecording()
+    }
+
+    @objc private func toggleRecordingPause() {
+        model.toggleRecordingPause()
     }
 
     @objc private func chooseCaptureDirectory() {
