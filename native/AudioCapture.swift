@@ -9,11 +9,43 @@ final class AudioCaptureController: NSObject, AVCaptureAudioDataOutputSampleBuff
     private let queue = DispatchQueue(label: "liveface.audio")
     private var configured = false
     private var audioOutput: AVCaptureAudioDataOutput?
+    private let settingsLock = NSLock()
+    private var selectedMicrophoneID: String?
 
     var onSample: ((CMSampleBuffer) -> Void)?
     var onLevel: ((Float) -> Void)?
 
     private var lastLevelAt: Double = 0
+
+    func setMicrophone(id: String?) {
+        settingsLock.lock()
+        selectedMicrophoneID = id
+        settingsLock.unlock()
+        queue.async {
+            if self.session.isRunning {
+                self.session.stopRunning()
+            }
+            self.configured = false
+        }
+    }
+
+    private var currentMicrophoneID: String? {
+        settingsLock.lock()
+        defer { settingsLock.unlock() }
+        return selectedMicrophoneID
+    }
+
+    static func audioDevices() -> [CaptureDevice] {
+        let types: [AVCaptureDevice.DeviceType] = [
+            .microphone, .external
+        ]
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: types, mediaType: .audio, position: .unspecified
+        )
+        return discovery.devices.map {
+            CaptureDevice(id: $0.uniqueID, name: $0.localizedName)
+        }
+    }
 
     func start(completion: @escaping (Bool) -> Void) {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -40,7 +72,16 @@ final class AudioCaptureController: NSObject, AVCaptureAudioDataOutputSampleBuff
         queue.async {
             if !self.configured {
                 self.session.beginConfiguration()
-                guard let device = AVCaptureDevice.default(for: .audio),
+                for input in self.session.inputs {
+                    self.session.removeInput(input)
+                }
+                for output in self.session.outputs {
+                    self.session.removeOutput(output)
+                }
+                let wanted = self.currentMicrophoneID
+                let device = wanted.flatMap { AVCaptureDevice(uniqueID: $0) }
+                    ?? AVCaptureDevice.default(for: .audio)
+                guard let device,
                       let input = try? AVCaptureDeviceInput(device: device),
                       self.session.canAddInput(input) else {
                     self.session.commitConfiguration()

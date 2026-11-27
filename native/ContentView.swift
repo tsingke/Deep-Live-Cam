@@ -157,6 +157,7 @@ private struct SidebarView: View {
                     header
                     photosSection
                     controlsSection
+                    devicesSection
                     statsSection
                     obsSection
                     captureSection
@@ -431,6 +432,77 @@ private struct SidebarView: View {
                 .buttonStyle(.plain)
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(Theme.accent)
+            }
+        }
+        .cardStyle()
+    }
+
+    private var devicesSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text("设备")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                Button("刷新") { model.refreshDevices() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(Theme.accent)
+            }
+
+            HStack {
+                Text("摄像头").font(.system(size: 12))
+                Spacer()
+                Picker(
+                    "",
+                    selection: Binding(
+                        get: { model.selectedCameraID },
+                        set: { model.setCameraDevice($0) }
+                    )
+                ) {
+                    Text("系统默认").tag("")
+                    ForEach(model.cameraDevices) { device in
+                        Text(device.name).tag(device.id)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 184)
+                .disabled(model.isRunning)
+            }
+
+            HStack {
+                Text("麦克风").font(.system(size: 12))
+                Spacer()
+                Picker(
+                    "",
+                    selection: Binding(
+                        get: { model.selectedMicrophoneID },
+                        set: { model.setMicrophoneDevice($0) }
+                    )
+                ) {
+                    Text("系统默认").tag("")
+                    ForEach(model.microphoneDevices) { device in
+                        Text(device.name).tag(device.id)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 184)
+                .disabled(model.isRecording)
+            }
+
+            if model.isRunning || model.isRecording {
+                Text(model.isRunning
+                     ? "停止直播后可切换摄像头；停止录制后可切换麦克风。"
+                     : "停止录制后可切换麦克风。")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("可选外接摄像头/麦克风；未选择时使用系统默认。")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .cardStyle()

@@ -1,5 +1,10 @@
 import Foundation
 
+struct CaptureDevice: Identifiable, Hashable {
+    let id: String
+    let name: String
+}
+
 struct PhotoInfo: Codable, Identifiable, Hashable {
     let id: String
     let name: String

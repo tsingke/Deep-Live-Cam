@@ -26,6 +26,7 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     private var quality: Double = 0.72
     private var demoTimer: Timer?
     private var lastPreviewAt: Double = 0
+    private var selectedCameraID: String?
 
     weak var backend: BackendClient?
     var onPreview: ((CGImage) -> Void)?
@@ -55,6 +56,41 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         settingsLock.lock()
         defer { settingsLock.unlock() }
         return quality
+    }
+
+    private var currentCameraID: String? {
+        settingsLock.lock()
+        defer { settingsLock.unlock() }
+        return selectedCameraID
+    }
+
+    func setCamera(id: String?) {
+        settingsLock.lock()
+        selectedCameraID = id
+        settingsLock.unlock()
+        queue.async {
+            if self.session.isRunning {
+                self.session.stopRunning()
+                self.setState(running: false)
+                DispatchQueue.main.async {
+                    self.isRunning = false
+                    self.onRunningChanged?(false)
+                }
+            }
+            self.configured = false
+        }
+    }
+
+    static func videoDevices() -> [CaptureDevice] {
+        let types: [AVCaptureDevice.DeviceType] = [
+            .builtInWideAngleCamera, .external, .continuityCamera
+        ]
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: types, mediaType: .video, position: .unspecified
+        )
+        return discovery.devices.map {
+            CaptureDevice(id: $0.uniqueID, name: $0.localizedName)
+        }
     }
 
     // MARK: - 启停
@@ -108,13 +144,22 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         queue.async {
             if !self.configured {
                 self.session.beginConfiguration()
+                for input in self.session.inputs {
+                    self.session.removeInput(input)
+                }
+                for output in self.session.outputs {
+                    self.session.removeOutput(output)
+                }
                 if self.session.canSetSessionPreset(.hd1280x720) {
                     self.session.sessionPreset = .hd1280x720
                 } else {
                     self.session.sessionPreset = .high
                 }
 
-                guard let device = AVCaptureDevice.default(for: .video) else {
+                let wanted = self.currentCameraID
+                let device = wanted.flatMap { AVCaptureDevice(uniqueID: $0) }
+                    ?? AVCaptureDevice.default(for: .video)
+                guard let device else {
                     self.session.commitConfiguration()
                     DispatchQueue.main.async { self.onError?("没有找到可用的摄像头") }
                     return

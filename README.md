@@ -76,6 +76,11 @@ python3.12 -m venv .venv
 - 每张照片会自动用 buffalo_l 检测最大人脸并提取 512 维特征。
 - 照片保存在 `photos/`，索引在 `photos/library.json`，重启 App 后自动恢复。
 
+### 设备选择
+- 侧栏「设备」可选择外接摄像头/麦克风；**停止直播/录制后**切换。
+- 未选择时使用系统默认设备；设备变化后可点「刷新」重新枚举。
+- 外接设备未显示时，确认已连接并在系统设置中允许 LiveFace 访问摄像头/麦克风。
+
 ### 换脸人数与锁定主角
 
 - 侧栏「换脸人数」可选 **1 人（主角）/ 2 人 / 3 人 / 全部**。
@@ -244,6 +249,7 @@ tsingke/Deep-Live-Cam/
 | 点开始直播后 App 退出 | App 会把异常原因写入 `logs/native-crash.log`，请查看该文件 |
 | 点击人脸没有锁定 | 需在直播中点击；脸太小/被遮挡时可能无法锁定。点「自动选择」恢复 |
 | 截图/录制没有反应 | 先开始直播；截图和录制都需要已显示的换脸画面 |
+| 外接摄像头/麦克风看不到 | 停止直播/录制后点「设备 → 刷新」；确认设备已连接并授权 |
 | 录制的视频没有声音 | 系统设置 → 隐私与安全性 → 麦克风 → 允许 LiveFace；首次拒绝后重新开始录制 |
 | 换头没有变化/接缝明显 | 使用正脸、半身照、接近光源；换头是实验性 2D 融合 |
 | `onnxruntime 没有 CoreMLExecutionProvider` | 确认装的是 `onnxruntime==1.28.0`（darwin arm64 wheel），`python -c "import onnxruntime; print(onnxruntime.get_available_providers())"` |

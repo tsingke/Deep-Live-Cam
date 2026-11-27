@@ -24,6 +24,10 @@ final class AppModel: ObservableObject {
     @Published var headStrength = 90
     @Published var headScale = 100
     @Published var headOffsetY = 0
+    @Published var selectedCameraID = ""
+    @Published var selectedMicrophoneID = ""
+    @Published var cameraDevices: [CaptureDevice] = []
+    @Published var microphoneDevices: [CaptureDevice] = []
     @Published var captureDirectory: URL = AppModel.defaultCaptureDirectory() {
         didSet {
             UserDefaults.standard.set(captureDirectory.path, forKey: "lf_capture_dir")
@@ -106,8 +110,13 @@ final class AppModel: ObservableObject {
                 self.micLevel = level
             }
         }
+        selectedCameraID = UserDefaults.standard.string(forKey: "lf_camera_id") ?? ""
+        selectedMicrophoneID = UserDefaults.standard.string(forKey: "lf_mic_id") ?? ""
+        camera.setCamera(id: selectedCameraID.isEmpty ? nil : selectedCameraID)
+        audioCapture.setMicrophone(id: selectedMicrophoneID.isEmpty ? nil : selectedMicrophoneID)
         wireCamera()
         observeBackend()
+        refreshDevices()
         refreshRecentCaptures()
     }
 
@@ -209,7 +218,7 @@ final class AppModel: ObservableObject {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         print("[permission] camera status=\(status.rawValue)")
         guard status == .notDetermined else { return }
-        AVCaptureDevice.requestAccess(for: .video) { granted in
+        AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
             print("[permission] camera granted=\(granted)")
             let path = BackendClient.resolveProjectPath() + "/logs/camera-permission.log"
             let line = "\(Date()) granted=\(granted)\n"
@@ -219,6 +228,9 @@ final class AppModel: ObservableObject {
                 try? handle.close()
             } else {
                 try? line.write(toFile: path, atomically: true, encoding: .utf8)
+            }
+            if granted {
+                DispatchQueue.main.async { self?.refreshDevices() }
             }
         }
     }
@@ -363,6 +375,51 @@ final class AppModel: ObservableObject {
         flash(enabled
               ? "换头已开启（实验）：叠加源发型与头部轮廓"
               : "已切回换脸：只替换面部")
+    }
+
+    func refreshDevices() {
+        let cameras = CameraController.videoDevices()
+        let microphones = AudioCaptureController.audioDevices()
+        cameraDevices = cameras
+        microphoneDevices = microphones
+        if !isRunning,
+           !selectedCameraID.isEmpty,
+           !cameras.contains(where: { $0.id == selectedCameraID }) {
+            selectedCameraID = ""
+            camera.setCamera(id: nil)
+            UserDefaults.standard.set("", forKey: "lf_camera_id")
+        }
+        if !isRecording,
+           !selectedMicrophoneID.isEmpty,
+           !microphones.contains(where: { $0.id == selectedMicrophoneID }) {
+            selectedMicrophoneID = ""
+            audioCapture.setMicrophone(id: nil)
+            UserDefaults.standard.set("", forKey: "lf_mic_id")
+        }
+    }
+
+    func setCameraDevice(_ id: String) {
+        guard !isRunning else {
+            flash("请先停止直播，再切换摄像头")
+            return
+        }
+        guard id != selectedCameraID else { return }
+        selectedCameraID = id
+        camera.setCamera(id: id.isEmpty ? nil : id)
+        UserDefaults.standard.set(id, forKey: "lf_camera_id")
+        flash(id.isEmpty ? "摄像头：系统默认" : "摄像头已选择")
+    }
+
+    func setMicrophoneDevice(_ id: String) {
+        guard !isRecording else {
+            flash("请先停止录制，再切换麦克风")
+            return
+        }
+        guard id != selectedMicrophoneID else { return }
+        selectedMicrophoneID = id
+        audioCapture.setMicrophone(id: id.isEmpty ? nil : id)
+        UserDefaults.standard.set(id, forKey: "lf_mic_id")
+        flash(id.isEmpty ? "麦克风：系统默认" : "麦克风已选择")
     }
 
     func setHeadStrength(_ value: Int) {
@@ -572,6 +629,8 @@ final class AppModel: ObservableObject {
             audioCapture.start { ok in
                 if !ok {
                     self.flash("麦克风不可用：只录制画面")
+                } else {
+                    self.refreshDevices()
                 }
                 begin(ok)
             }
