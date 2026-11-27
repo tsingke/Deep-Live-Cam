@@ -41,6 +41,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             }
         }
+
+        if args.contains("--settings") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                NotificationCenter.default.post(name: .liveFaceOpenSettings, object: nil)
+            }
+        }
+
+        if let index = args.firstIndex(of: "--snapshot-settings"), index + 1 < args.count {
+            let path = args[index + 1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                if let sheet = self.window?.attachedSheet {
+                    self.capture(window: sheet, to: path)
+                }
+                NSApp.terminate(nil)
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -101,6 +117,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
             keyEquivalent: ""
         )
+        let settings = appMenu.addItem(
+            withTitle: "设置…",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        )
+        settings.keyEquivalentModifierMask = [.command]
+        settings.target = self
         appMenu.addItem(.separator())
         let quit = appMenu.addItem(withTitle: "退出实时换脸", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
@@ -171,6 +194,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func chooseCaptureDirectory() {
         model.chooseCaptureDirectory()
+    }
+
+    @objc private func openSettings() {
+        NotificationCenter.default.post(name: .liveFaceOpenSettings, object: nil)
     }
 
     @objc private func quitApp() {

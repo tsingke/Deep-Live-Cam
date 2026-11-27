@@ -39,6 +39,7 @@ final class UIState: ObservableObject {
     @Published var dropTargeted = false
     @Published var showStats = false
     @Published var showOBS = false
+    @Published var showSettings = false
     @Published var hoveredPhotoID: String?
     @Published var uploadHover = false
 }
@@ -133,6 +134,14 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: model.transientMessage)
+        .sheet(isPresented: $ui.showSettings) {
+            SettingsView(isPresented: $ui.showSettings)
+                .environmentObject(backend)
+                .environmentObject(model)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .liveFaceOpenSettings)) { _ in
+            ui.showSettings = true
+        }
         .onAppear {
             print("[ui] onAppear")
             model.startServices()
@@ -157,10 +166,6 @@ private struct SidebarView: View {
                     header
                     photosSection
                     controlsSection
-                    devicesSection
-                    statsSection
-                    obsSection
-                    captureSection
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 26)
@@ -200,6 +205,17 @@ private struct SidebarView: View {
             }
             Spacer(minLength: 4)
             StatusPill()
+            Button {
+                ui.showSettings = true
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(Color.white.opacity(0.05)))
+            }
+            .buttonStyle(.plain)
+            .help("设置（⌘,）")
         }
         .padding(.bottom, 2)
     }
@@ -346,100 +362,6 @@ private struct SidebarView: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            if model.headSwap {
-                VStack(spacing: 7) {
-                    HStack {
-                        Text("预设").font(.system(size: 12))
-                        Spacer()
-                        Menu("应用预设") {
-                            Button("自然（弱）") { model.applyHeadPreset(.natural) }
-                            Button("均衡（默认）") { model.applyHeadPreset(.balanced) }
-                            Button("明显（强）") { model.applyHeadPreset(.strong) }
-                        }
-                        .menuStyle(.borderlessButton)
-                        .frame(width: 124)
-                    }
-
-                    HStack {
-                        Text("换头强度").font(.system(size: 12))
-                        Spacer()
-                        Text("\(model.headStrength)%")
-                            .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(Theme.cyan)
-                    }
-                    Slider(
-                        value: Binding(
-                            get: { Double(model.headStrength) },
-                            set: { model.setHeadStrength(Int($0.rounded())) }
-                        ),
-                        in: 0...100, step: 5
-                    )
-                    .tint(Theme.accent)
-
-                    HStack {
-                        Text("头部缩放").font(.system(size: 12))
-                        Spacer()
-                        Text("\(model.headScale)%")
-                            .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(Theme.cyan)
-                    }
-                    Slider(
-                        value: Binding(
-                            get: { Double(model.headScale) },
-                            set: { model.setHeadScale(Int($0.rounded())) }
-                        ),
-                        in: 85...115, step: 1
-                    )
-                    .tint(Theme.accent)
-
-                    HStack {
-                        Text("上下微调").font(.system(size: 12))
-                        Spacer()
-                        Text(model.headOffsetY == 0
-                             ? "0%"
-                             : (model.headOffsetY > 0
-                                ? "+\(model.headOffsetY)%"
-                                : "\(model.headOffsetY)%"))
-                            .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(Theme.cyan)
-                    }
-                    Slider(
-                        value: Binding(
-                            get: { Double(model.headOffsetY) },
-                            set: { model.setHeadOffsetY(Int($0.rounded())) }
-                        ),
-                        in: -20...20, step: 1
-                    )
-                    .tint(Theme.accent)
-
-                    HStack {
-                        Text("左右微调").font(.system(size: 12))
-                        Spacer()
-                        Text(model.headOffsetX == 0
-                             ? "0%"
-                             : (model.headOffsetX > 0
-                                ? "+\(model.headOffsetX)%"
-                                : "\(model.headOffsetX)%"))
-                            .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(Theme.cyan)
-                    }
-                    Slider(
-                        value: Binding(
-                            get: { Double(model.headOffsetX) },
-                            set: { model.setHeadOffsetX(Int($0.rounded())) }
-                        ),
-                        in: -20...20, step: 1
-                    )
-                    .tint(Theme.accent)
-                }
-                .padding(.top, 2)
-
-                Text("强度 0 = 仅换脸；缩放/上下微调可减少接缝。")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
 
             HStack(alignment: .firstTextBaseline) {
                 Text("点击画面中的人脸可锁定主角")
