@@ -57,8 +57,8 @@ App 的 Bundle ID：`local.liveface.studio`
 
 **快照（本交接文档写入前的最新功能提交）**
 
-- App：`74b0e54` — `test: add isolated server API smoke`
-- Fork：`1345a07` — 同上
+- App：`91a96d9` — `feat: add resolution, quality and GPEN face enhancement controls`
+- Fork：`8705320` — 同上
 - 交接文档本身会有一次后续 commit；以 `git log -1` 为准。
 
 **重要维护约定**
@@ -118,10 +118,10 @@ App 预览（固定延迟上屏）
 | `main.swift` | AppKit 入口 |
 | `LiveFaceApp.swift` | AppDelegate、主窗口、菜单、崩溃日志、`--snapshot`/`--settings` 调试入口 |
 | `ContentView.swift` | 主界面：照片库、同步/画质、人数、模式、点击锁定、顶部快捷按钮 |
-| `SettingsView.swift` | 设置 sheet：设备 / 录制 / 换头 / 状态与 OBS / 快捷键 / 维护 |
+| `SettingsView.swift` | 设置 sheet：设备 / 画面画质 / 录制 / 换头 / 状态与 OBS / 快捷键 / 维护 |
 | `AppModel.swift` | 全局状态、快捷键、录制/截图、倒计时、最近文件、设备、窗口记忆、换头参数 |
 | `BackendClient.swift` | 启动/复用 Python 服务、HTTP API、轮询状态 |
-| `CameraController.swift` | AVFoundation 摄像头、设备选择、JPEG 编解码、延迟上屏 |
+| `CameraController.swift` | AVFoundation 摄像头、设备/分辨率选择、JPEG 编解码、延迟上屏 |
 | `AudioCapture.swift` | 录制期间麦克风采集、AAC 源数据、RMS 电平 |
 | `MediaCapture.swift` | PNG 截图、H.264 + AAC MP4、像素缓冲、PTS、暂停/继续重排 |
 | `OutputWindow.swift` | OBS 纯净输出窗口、黑底、FPS/光标、窗口 frame 记忆、置顶 |
@@ -171,6 +171,16 @@ App 预览（固定延迟上屏）
 - 固定延迟 0–1000ms，用于 OBS 音画同步。
 - 输出窗口 1280×720、黑底、无控件、16:9、F 全屏、Esc 关闭、光标自动隐藏。
 - 输出窗口可置顶；主窗口/输出窗口位置大小记忆。
+
+### 画质与分辨率
+- 采集：720p / 1080p / 4K（`AVCaptureSession` preset；停止直播后切换）。
+- 发送 JPEG 画质 50–95（默认 85）；服务端输出 JPEG 画质 50–95（默认 90）。
+- 清晰度增强 0–100（服务端 unsharp mask，整帧）。
+- **GPEN-BFR-256 面部增强**（可选）：首次下载约 75MB；增强换脸后的脸；会增加延迟/发热。
+- 画质预设：流畅优先（720p/75/85/0）、均衡（1080p/85/90/10）、清晰优先（1080p/92/93/25 + 面部增强）。
+- 录制码率 4/8/12/16/32 Mbps。
+- 实测：面部增强下 960×1137 测试图约 176–250ms/帧（约 4–6fps）；不开增强时约 50–80ms。
+- **限制**：inswapper 输出固定 128×128，不开增强时面部细节仍受模型限制；4K 对 M3 Pro 压力大。
 
 ### 录制
 - 顶部 `截图` / `⌘S`：PNG，保存当前换脸后的干净画面。
@@ -224,7 +234,9 @@ App 预览（固定延迟上屏）
 ```json
 {
   "detect_interval": 3,
-  "jpeg_quality": 85,
+  "jpeg_quality": 90,
+  "sharpen": 0,
+  "face_enhance": false,
   "swap_count": 1,
   "head_swap": false,
   "head_strength": 90,
@@ -238,6 +250,8 @@ App 预览（固定延迟上屏）
 
 - `detect_interval` 1–12
 - `jpeg_quality` 50–95
+- `sharpen` 0–100
+- `face_enhance` bool（运行时另有 `face_enhance_ready/error`）
 - `swap_count` 0（全部）..6
 - `head_strength` 0–100
 - `head_scale` 85–115
@@ -402,11 +416,12 @@ codesign --force --deep --sign - "$TMP/LiveFaceShot.app"
 ## 10. 当前已知限制
 
 - 换头是**实验性 2D 头型/发型融合**，不是 3D 生成式整头替换；侧脸/光线差异大时有接缝。
-- 录制暂停/继续已支持（单文件、无暂停空洞）；视频源固定 720p；音频可选但无增益/降噪。
+- 录制暂停/继续已支持（单文件、无暂停空洞）；视频分辨率随采集选择；音频可选但无增益/降噪。
 - `--demo` 依赖的测试素材已清理，当前不可用。
 - 旧侧栏的 `captureSection`/`devicesSection`/`statsSection`/`obsSection` 已从 `ContentView` 清理；设置项保留在 `SettingsView`。
 - 公开 fork 历史仍包含上游演示媒体；当前树已清理。
-- 已有 head_swap 单元测试、隔离服务 API smoke 与录制 smoke；尚无真实摄像头/麦克风/UI 回归。
+- 已有 head_swap 单元测试、隔离服务 API smoke 与录制 smoke；尚无真实摄像头/麦克风/4K/UI 回归。
+- 面部增强模型（GPEN-BFR-256，75MB）未入库；本机已放在 `Deep-Live-Cam/models/`。上游 Python 下载在部分网络会 SSL 失败；可手动放置模型。
 - `MediaCapture` 使用 macOS 27 中已弃用的 AVAssetWriter 输入 API；目标 macOS 14，构建有弃用警告但不影响。
 - 设置以 sheet 呈现，不是独立 Preferences 窗口；已支持 `⌘,`。
 - 窗口位置重置在下次启动生效。
@@ -414,7 +429,7 @@ codesign --force --deep --sign - "$TMP/LiveFaceShot.app"
 ## 11. 下一步建议（按优先级）
 
 1. **真正整头替换模型**：接入专用 head-swap/portrait 模型；需要新的模型下载、性能评估和许可审查。
-2. **真实设备/UI 集成测试**：摄像头/麦克风、目标锁定、设备枚举、UI 回归（服务 API 已有 smoke）。
+2. **真实设备/4K/UI 集成测试**：摄像头/麦克风、目标锁定、4K 帧、UI 回归（服务 API 已有 smoke）。
 3. **设置搜索/收藏**：设置项增多后可加搜索。
 4. **独立 Preferences 窗口**：替代 sheet；保持 `⌘,`。
 5. **打包/签名**：Developer ID、notarization、独立 App 分发。
@@ -457,7 +472,7 @@ codesign --force --deep --sign - "$TMP/LiveFaceShot.app"
 
 - 正常 App 由 `~/Applications/LiveFace.app` 启动；后台由 App 管理。
 - 服务状态：`GET http://127.0.0.1:8787/api/state`。
-- 默认设置：检测间隔 3、JPEG 85、换脸人数 1、换头关闭、强度 90、缩放 100、偏移 0/0。
+- 默认设置：检测间隔 3、发送画质 85、输出画质 90、换脸人数 1、换头关闭、强度 90、缩放 100、偏移 0/0；采集 720p；面部增强关闭。
 - 用户本地的照片库/录制目录属于用户；文档与仓库不包含其内容。
 - 最新功能提交见第 2 节；交接文档提交在其后。
 
