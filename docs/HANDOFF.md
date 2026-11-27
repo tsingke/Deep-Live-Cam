@@ -51,14 +51,13 @@ App 的 Bundle ID：`local.liveface.studio`
 | 位置 | 说明 |
 |---|---|
 | `<checkout>` | 本地工作副本，非 git 仓库；构建和调试在这里做 |
-| `tsingke/LiveFace`（私有） | 独立 App 仓库；Deep-Live-Cam 以 git submodule 引入 |
-| `tsingke/Deep-Live-Cam`（公开） | 增强 fork；根目录同时包含 App 代码与上游 `modules/` |
-| submodule `Deep-Live-Cam` | 在 `LiveFace` 仓库中固定到 `db370816`（仅源码的上游快照） |
+| `tsingke/LiveFace`（私有） | **独立 App 仓库**；必要的 Deep-Live-Cam `modules/` 已 vendored，无 submodule；`./install.sh` 一键安装 |
+| `tsingke/Deep-Live-Cam`（公开） | 增强 fork；根目录同时包含 App 代码与上游 `modules/`；与 App 仓库的 App 文件保持同步 |
 
 **快照（本交接文档写入前的最新功能提交）**
 
-- App：`91a96d9` — `feat: add resolution, quality and GPEN face enhancement controls`
-- Fork：`8705320` — 同上
+- App：`e3828c9` — `feat: make LiveFace a standalone source repository`
+- Fork：`8705320` — 最近的合并 App 代码快照（公开 fork 未重复 vendoring 提交）
 - 交接文档本身会有一次后续 commit；以 `git log -1` 为准。
 
 **重要维护约定**
@@ -66,16 +65,16 @@ App 的 Bundle ID：`local.liveface.studio`
 - `LiveFace` 与公开 fork 的**App 相关文件必须保持一致**：
   `native/`、`web_server.py`、`head_swap.py`、`requirements-web.txt`、
   `make_native_app.sh`、`README.md`、`docs/`。
-- 只有 `Deep-Live-Cam` submodule（App 仓库）与 fork 根目录 `modules/` 的来源不同；
-  上游源码未在本项目内修改。
-- 如果未来修改了 `modules/`，需要同时更新 submodule 指针和 fork。
+- App 仓库把必需的 `Deep-Live-Cam/modules/` 与 `requirements.txt` **vendored** 在仓库内，
+  **没有 git submodule**；公开 fork 根目录仍保留完整 `modules/`。
+- 如果未来升级上游 `modules/`，需要手动重新 vendor 到 App 仓库，并同步公开 fork。
 
 **历史清理提醒**
 
 - 公开 fork 的旧历史仍可能包含上游演示媒体。
 - 当前树/README 已无人物素材。
-- 若需要彻底清除历史，使用 `git filter-repo` 重写并强推；这会改写所有 commit，
-  并可能需要同步 App 仓库的 submodule 指针。**先征求用户确认。**
+- 若需要彻底清除历史，使用 `git filter-repo` 重写并强推；这会改写所有 commit。
+  **先征求用户确认。**
 
 ---
 
@@ -133,7 +132,7 @@ App 预览（固定延迟上屏）
 |---|---|
 | `web_server.py` | aiohttp、Engine、帧队列、照片库、目标选择、配置、API |
 | `head_swap.py` | Vision 人像分割源头部遮罩、GrabCut 回退、五点相似变换、软 alpha 融合 |
-| `Deep-Live-Cam/modules/`（App submodule）或 `modules/`（fork） | 上游检测/换脸源码 |
+| `Deep-Live-Cam/modules/`（App vendored）或 `modules/`（fork） | 上游检测/换脸源码 |
 | `Deep-Live-Cam/models/` 或 `models/` | 模型缓存（运行期生成，不入库） |
 | `web/` | 浏览器调试控制台（App 不依赖） |
 | `start.command` | 浏览器调试启动脚本 |
@@ -305,14 +304,22 @@ App 预览（固定延迟上屏）
 
 ### 安装
 
+**独立 App 仓库（推荐）**
+
 ```bash
-cd <checkout>
-python3.12 -m venv .venv
-.venv/bin/pip install -r Deep-Live-Cam/requirements.txt -r requirements-web.txt
-./make_app.sh --install
+git clone https://github.com/tsingke/LiveFace.git
+cd LiveFace
+./install.sh
 ```
 
-公开 fork 根目录是 `modules/`、`models/`、`requirements.txt`；命令类似，但不需要 submodule。
+`install.sh` 会创建 `.venv`、安装依赖并构建/安装到 `~/Applications`；也可以双击 `install.command`。
+公开 fork 根目录仍可用手动方式：
+
+```bash
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt -r requirements-web.txt
+./make_app.sh --install
+```
 
 ### 运行
 
@@ -407,9 +414,9 @@ codesign --force --deep --sign - "$TMP/LiveFaceShot.app"
 
 ### 仓库/代码同步注意
 
-- App 仓库的 `Deep-Live-Cam` submodule 固定在 `db370816`；根目录的 App 代码是独立的。
+
 - 公开 fork 根目录同时有 App 代码和上游 `modules/`。
-- 修改了 `modules/` 才需要更新 submodule；只改 App 根文件不需要。
+- App 仓库不再有 submodule；上游 `modules/` 变更需要手动重新 vendor。
 
 ---
 
@@ -419,6 +426,7 @@ codesign --force --deep --sign - "$TMP/LiveFaceShot.app"
 - 录制暂停/继续已支持（单文件、无暂停空洞）；视频分辨率随采集选择；音频可选但无增益/降噪。
 - `--demo` 依赖的测试素材已清理，当前不可用。
 - 旧侧栏的 `captureSection`/`devicesSection`/`statsSection`/`obsSection` 已从 `ContentView` 清理；设置项保留在 `SettingsView`。
+- App 仓库已经 source-vendored、无 submodule；但仍是“Python 环境 + 首次下载模型”的安装方式，不是完全内置 Python/模型的便携二进制。
 - 公开 fork 历史仍包含上游演示媒体；当前树已清理。
 - 已有 head_swap 单元测试、隔离服务 API smoke 与录制 smoke；尚无真实摄像头/麦克风/4K/UI 回归。
 - 面部增强模型（GPEN-BFR-256，75MB）未入库；本机已放在 `Deep-Live-Cam/models/`。上游 Python 下载在部分网络会 SSL 失败；可手动放置模型。
@@ -428,12 +436,13 @@ codesign --force --deep --sign - "$TMP/LiveFaceShot.app"
 
 ## 11. 下一步建议（按优先级）
 
-1. **真正整头替换模型**：接入专用 head-swap/portrait 模型；需要新的模型下载、性能评估和许可审查。
-2. **真实设备/4K/UI 集成测试**：摄像头/麦克风、目标锁定、4K 帧、UI 回归（服务 API 已有 smoke）。
-3. **设置搜索/收藏**：设置项增多后可加搜索。
-4. **独立 Preferences 窗口**：替代 sheet；保持 `⌘,`。
-5. **打包/签名**：Developer ID、notarization、独立 App 分发。
-6. **历史清理**：filter-repo 清除公开 fork 的上游媒体历史（需用户确认）。
+1. **便携式 App**：内置/附带 Python 运行时与模型，拷贝即用（体积约 2–3GB）。
+2. **真正整头替换模型**：接入专用 head-swap/portrait 模型；需要新的模型下载、性能评估和许可审查。
+3. **真实设备/4K/UI 集成测试**：摄像头/麦克风、目标锁定、4K 帧、UI 回归（服务 API 已有 smoke）。
+4. **设置搜索/收藏**：设置项增多后可加搜索。
+5. **独立 Preferences 窗口**：替代 sheet；保持 `⌘,`。
+6. **签名/分发**：Developer ID、notarization、便携包。
+7. **历史清理**：filter-repo 清除公开 fork 的上游媒体历史（需用户确认）。
 
 ---
 
@@ -458,7 +467,7 @@ codesign --force --deep --sign - "$TMP/LiveFaceShot.app"
 
 - [ ] 读本文件，确认最新 commit：`git log -1`（两个仓库）。
 - [ ] `git status`：不要带入用户照片/日志/config/模型。
-- [ ] `git submodule status`：App 仓库 submodule 是否为预期 pin。
+- [ ] App 仓库无 submodule；确认 `Deep-Live-Cam/modules/face_analyser.py` 存在，`./install.sh` 可执行。
 - [ ] 运行 `./make_native_app.sh --install`，确认构建。
 - [ ] 打开 App，确认后台 `ready`、摄像头/麦克风权限。
 - [ ] 需要截图时只使用**临时空照片库**流程。
