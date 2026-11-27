@@ -381,6 +381,13 @@ struct SettingsView: View {
                 }
             }
 
+            Section("输出窗口") {
+                Toggle("输出窗口置顶", isOn: $model.outputAlwaysOnTop)
+                Text("置顶后 OBS 采集时也不会被其他窗口盖住；窗口位置和大小会自动记住。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("OBS 采集") {
                 Text("1. 点「输出窗口」，把弹出的窗口拖到合适大小。")
                 Text("2. OBS 添加「窗口采集」，选择「实时换脸输出」。")

@@ -11,6 +11,14 @@ final class OutputWindowController: NSObject, NSWindowDelegate {
     private var outputView: OutputView?
     var onClose: (() -> Void)?
 
+    var alwaysOnTop = false {
+        didSet { applyLevel() }
+    }
+
+    private func applyLevel() {
+        window?.level = alwaysOnTop ? .floating : .normal
+    }
+
     func show(image: CGImage?) {
         if window == nil {
             createWindow()
@@ -31,8 +39,14 @@ final class OutputWindowController: NSObject, NSWindowDelegate {
     }
 
     private func createWindow() {
+        let savedFrame = UserDefaults.standard.string(forKey: "lf_output_frame")
+            .flatMap { NSRectFromString($0) }
+        let initial = savedFrame.flatMap { rect in
+            rect.width >= 320 && rect.height >= 180 ? rect : nil
+        } ?? NSRect(x: 0, y: 0, width: 1280, height: 720)
+
         let window = OutputWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1280, height: 720),
+            contentRect: initial,
             styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -56,14 +70,23 @@ final class OutputWindowController: NSObject, NSWindowDelegate {
         view.autoresizingMask = [.width, .height]
         view.wantsLayer = true
         window.contentView = view
-        window.setContentSize(NSSize(width: 1280, height: 720))
-        window.center()
-
+        window.setContentSize(initial.size)
+        if savedFrame != nil {
+            window.setFrame(window.constrainFrameRect(initial, to: nil), display: false)
+        } else {
+            window.center()
+        }
         self.window = window
         self.outputView = view
+        applyLevel()
     }
 
     func windowWillClose(_ notification: Notification) {
+        if let window, !window.styleMask.contains(.fullScreen) {
+            UserDefaults.standard.set(
+                NSStringFromRect(window.frame), forKey: "lf_output_frame"
+            )
+        }
         NSCursor.unhide()
         onClose?()
     }

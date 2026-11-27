@@ -28,6 +28,12 @@ final class AppModel: ObservableObject {
     @Published var maxRecordingMinutes = 0 {
         didSet { UserDefaults.standard.set(maxRecordingMinutes, forKey: "lf_max_record_minutes") }
     }
+    @Published var outputAlwaysOnTop = false {
+        didSet {
+            UserDefaults.standard.set(outputAlwaysOnTop, forKey: "lf_output_on_top")
+            outputController?.alwaysOnTop = outputAlwaysOnTop
+        }
+    }
     @Published var selectedCameraID = ""
     @Published var selectedMicrophoneID = ""
     @Published var cameraDevices: [CaptureDevice] = []
@@ -124,6 +130,9 @@ final class AppModel: ObservableObject {
         }
         let savedMax = UserDefaults.standard.integer(forKey: "lf_max_record_minutes")
         if [1, 5, 10, 30].contains(savedMax) { maxRecordingMinutes = savedMax }
+        if UserDefaults.standard.object(forKey: "lf_output_on_top") != nil {
+            outputAlwaysOnTop = UserDefaults.standard.bool(forKey: "lf_output_on_top")
+        }
         camera.backend = backend
         camera.updateSettings(delayMs: delayMs, qualityPct: qualityPct)
         audioCapture.onSample = { [weak self] sampleBuffer in
@@ -786,6 +795,7 @@ final class AppModel: ObservableObject {
     func showOutputWindow() {
         if outputController == nil {
             let controller = OutputWindowController()
+            controller.alwaysOnTop = outputAlwaysOnTop
             controller.onClose = { [weak self] in
                 self?.outputController = nil
             }

@@ -69,6 +69,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let window {
+            UserDefaults.standard.set(
+                NSStringFromRect(window.frame), forKey: "lf_main_frame"
+            )
+        }
         model.shutdown()
     }
 
@@ -95,7 +100,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.setContentSize(NSSize(width: 1220, height: 780))
             window.isReleasedWhenClosed = false
             window.isRestorable = false
-            window.center()
+            if let saved = UserDefaults.standard.string(forKey: "lf_main_frame"),
+               !saved.isEmpty {
+                let frame = NSRectFromString(saved)
+                if frame.width >= 1040, frame.height >= 680 {
+                    window.setFrame(window.constrainFrameRect(frame, to: nil), display: false)
+                } else {
+                    window.center()
+                }
+            } else {
+                window.center()
+            }
             window.makeKeyAndOrderFront(nil)
             self.window = window
         } else {
