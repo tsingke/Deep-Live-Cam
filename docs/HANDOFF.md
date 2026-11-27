@@ -57,8 +57,8 @@ App 的 Bundle ID：`local.liveface.studio`
 
 **快照（本交接文档写入前的最新功能提交）**
 
-- App：`b743e38` — `feat: add shortcut reference, log access and window reset`
-- Fork：`7470e03` — 同上
+- App：`31441b3` — `feat: pause and resume recording in a single file`
+- Fork：`85a165b` — 同上
 - 交接文档本身会有一次后续 commit；以 `git log -1` 为准。
 
 **重要维护约定**
@@ -170,8 +170,10 @@ App 预览（固定延迟上屏）
 
 ### 录制
 - 顶部 `截图` / `⌘S`：PNG，保存当前换脸后的干净画面。
-- 顶部 `录制` / `⌘R`：H.264 MP4；可选 AAC 麦克风。
+- 顶部 `录制` / `⌘R`：H.264 MP4；可选 AAC 麦克风；`⌘P` 暂停/继续。
 - 4/8/12 Mbps 画质；倒计时 0/3/5 秒；最长录制 1/5/10/30 分钟。
+- **暂停/继续录制**（`⌘P` 或顶部按钮）：暂停时停止视频帧和麦克风，继续后写入同一文件；
+  音视频 PTS 会去掉暂停段，REC 计时/最长录制只算实际录制时间。
 - 麦克风可关闭；录制期间顶部显示 RMS 电平；首次请求麦克风权限。
 - 停止直播/退出 App 自动结束录制并停止麦克风。
 - 默认目录 `~/Movies/LiveFace`；最近文件列出 **LiveFace_** 前缀的 5 个文件，可打开/Finder/删除。
@@ -260,8 +262,11 @@ App 预览（固定延迟上屏）
   - 视频 PTS = `CACurrentMediaTime()` 拍摄时间；音频 PTS 用采集 CMSampleBuffer 原始 host clock。
   - 这样预览固定延迟不会造成本地文件音画不同步。
 - 视频帧来自 `AppModel.onDisplay`（已换脸、已显示的那一帧），音频来自 `AudioCapture`。
+- 暂停：`MediaCapture.pause(at:)` 停止收帧/音频，`audioCapture.stop()`；继续时
+  `resume(at:)` 累加 pausedTotal，视频 PTS 平移，音频用
+  `CMSampleBufferSetOutputPresentationTimeStamp` 重写输出 PTS；暂停段不进入文件。
 - 停止：`audioCapture.stop()` → `mediaCapture.finish()`；退出：`finishSynchronously()`。
-- 最长录制在 `tickMetrics` 检查。
+- 最长录制在 `tickMetrics` 检查，暂停期间不计时。
 - 文件名：`LiveFace_yyyy-MM-dd_HH-mm-ss.png/.mp4`。
 - 最近文件只筛 `LiveFace_` 前缀，避免列出用户目录里的其他文件。
 - 删除前 NSAlert 二次确认。
@@ -381,7 +386,7 @@ codesign --force --deep --sign - "$TMP/LiveFaceShot.app"
 ## 10. 当前已知限制
 
 - 换头是**实验性 2D 头型/发型融合**，不是 3D 生成式整头替换；侧脸/光线差异大时有接缝。
-- 录制没有暂停/续录；视频源固定 720p；音频可选但无增益/降噪。
+- 录制暂停/继续已支持（单文件、无暂停空洞）；视频源固定 720p；音频可选但无增益/降噪。
 - `--demo` 依赖的测试素材已清理，当前不可用。
 - 主界面 `ContentView.swift` 里仍保留旧侧栏的 `captureSection`/`devicesSection`/`statsSection`/`obsSection` 私有实现（已不被主界面调用）；可在后续清理，注意不要破坏 SettingsView。
 - 公开 fork 历史仍包含上游演示媒体；当前树已清理。
@@ -393,13 +398,12 @@ codesign --force --deep --sign - "$TMP/LiveFaceShot.app"
 ## 11. 下一步建议（按优先级）
 
 1. **真正整头替换模型**：接入专用 head-swap/portrait 模型；需要新的模型下载、性能评估和许可审查。
-2. **录制暂停/续录**：单文件 PTS 偏移 + 音频 CMSampleBuffer 重新计时；或分段录制合并。
-3. **自动化测试**：服务端帧协议、目标锁定、截图/录制文件轨、设备枚举。
-4. **清理旧代码**：移除 `ContentView` 中不再使用的侧栏 section；保留 `SettingsView`。
-5. **设置搜索/收藏**：设置项增多后可加搜索。
-6. **独立 Preferences 窗口**：替代 sheet；保持 `⌘,`。
-7. **打包/签名**：Developer ID、notarization、独立 App 分发。
-8. **历史清理**：filter-repo 清除公开 fork 的上游媒体历史（需用户确认）。
+2. **自动化测试**：服务端帧协议、目标锁定、截图/录制文件轨、暂停/继续、设备枚举。
+3. **清理旧代码**：移除 `ContentView` 中不再使用的侧栏 section；保留 `SettingsView`。
+4. **设置搜索/收藏**：设置项增多后可加搜索。
+5. **独立 Preferences 窗口**：替代 sheet；保持 `⌘,`。
+6. **打包/签名**：Developer ID、notarization、独立 App 分发。
+7. **历史清理**：filter-repo 清除公开 fork 的上游媒体历史（需用户确认）。
 
 ---
 
