@@ -123,7 +123,7 @@ App 预览（固定延迟上屏）
 | `BackendClient.swift` | 启动/复用 Python 服务、HTTP API、轮询状态 |
 | `CameraController.swift` | AVFoundation 摄像头、设备选择、JPEG 编解码、延迟上屏 |
 | `AudioCapture.swift` | 录制期间麦克风采集、AAC 源数据、RMS 电平 |
-| `MediaCapture.swift` | PNG 截图、H.264 + AAC MP4、像素缓冲、PTS、暂停边界（无暂停功能） |
+| `MediaCapture.swift` | PNG 截图、H.264 + AAC MP4、像素缓冲、PTS、暂停/继续重排 |
 | `OutputWindow.swift` | OBS 纯净输出窗口、黑底、FPS/光标、窗口 frame 记忆、置顶 |
 | `Models.swift` | `PhotoInfo`、`ServerSettings`、`ServerState`、`CaptureDevice` 等 |
 
@@ -271,7 +271,7 @@ App 预览（固定延迟上屏）
 - 最近文件只筛 `LiveFace_` 前缀，避免列出用户目录里的其他文件。
 - 删除前 NSAlert 二次确认。
 
-**已知限制**：无暂停/续录；源分辨率固定摄像头 720p；无音频时视频仍可录。
+**已知限制**：暂停/继续已支持（单文件）；源分辨率固定摄像头 720p；无音频时视频仍可录。
 
 ---
 
