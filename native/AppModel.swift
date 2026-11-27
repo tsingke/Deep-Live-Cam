@@ -39,6 +39,12 @@ final class AppModel: ObservableObject {
     @Published var micLevel: Float = 0
     @Published var recordSeconds = 0
     @Published var recordCountdown: Int?
+    @Published var videoBitrateMbps = 8 {
+        didSet { UserDefaults.standard.set(videoBitrateMbps, forKey: "lf_video_bitrate") }
+    }
+    @Published var recordMicrophone = true {
+        didSet { UserDefaults.standard.set(recordMicrophone, forKey: "lf_record_mic") }
+    }
     @Published var recordCountdownSeconds = 0 {
         didSet {
             UserDefaults.standard.set(recordCountdownSeconds, forKey: "lf_record_countdown")
@@ -107,6 +113,11 @@ final class AppModel: ObservableObject {
             captureDirectory = URL(fileURLWithPath: saved, isDirectory: true)
         }
         recordCountdownSeconds = UserDefaults.standard.integer(forKey: "lf_record_countdown")
+        let savedBitrate = UserDefaults.standard.integer(forKey: "lf_video_bitrate")
+        if [4, 8, 12].contains(savedBitrate) { videoBitrateMbps = savedBitrate }
+        if UserDefaults.standard.object(forKey: "lf_record_mic") != nil {
+            recordMicrophone = UserDefaults.standard.bool(forKey: "lf_record_mic")
+        }
         camera.backend = backend
         camera.updateSettings(delayMs: delayMs, qualityPct: qualityPct)
         audioCapture.onSample = { [weak self] sampleBuffer in
@@ -576,6 +587,24 @@ final class AppModel: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([item.url])
     }
 
+    func deleteCapture(_ item: CaptureItem) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "删除这个文件？"
+        alert.informativeText = item.name
+        alert.addButton(withTitle: "删除")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try FileManager.default.removeItem(at: item.url)
+            if lastCaptureURL == item.url { lastCaptureURL = nil }
+            refreshRecentCaptures()
+            flash("已删除：\(item.name)")
+        } catch {
+            alertMessage = "删除失败：\(error.localizedDescription)"
+        }
+    }
+
     func captureScreenshot() {
         guard let image = displayedImage else {
             alertMessage = "还没有换脸画面，请先开始直播。"
@@ -666,7 +695,10 @@ final class AppModel: ObservableObject {
             }
             do {
                 let url = try self.mediaCapture.start(
-                    image: image, in: self.captureDirectory, withAudio: withAudio
+                    image: image,
+                    in: self.captureDirectory,
+                    withAudio: withAudio,
+                    videoBitrate: self.videoBitrateMbps * 1_000_000
                 )
                 self.recordingWithAudio = withAudio
                 self.isRecording = true
@@ -684,6 +716,12 @@ final class AppModel: ObservableObject {
                 self.recordingWithAudio = false
                 self.alertMessage = error.localizedDescription
             }
+        }
+
+        guard recordMicrophone else {
+            begin(false)
+            flash("录制麦克风已关闭：视频无音频")
+            return
         }
 
         let status = AVCaptureDevice.authorizationStatus(for: .audio)

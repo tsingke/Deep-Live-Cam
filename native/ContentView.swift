@@ -562,6 +562,32 @@ private struct SidebarView: View {
                 .frame(width: 96)
             }
 
+            HStack {
+                Text("录制画质").font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Picker("", selection: $model.videoBitrateMbps) {
+                    Text("4 Mbps").tag(4)
+                    Text("8 Mbps").tag(8)
+                    Text("12 Mbps").tag(12)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 96)
+                .disabled(model.isRecording)
+            }
+
+            HStack {
+                Text("录制麦克风").font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Toggle("", isOn: $model.recordMicrophone)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .disabled(model.isRecording)
+            }
+
             HStack(spacing: 8) {
                 Button {
                     model.captureScreenshot()
@@ -662,6 +688,14 @@ private struct SidebarView: View {
                         }
                         .buttonStyle(.plain)
                         .help("在 Finder 中显示")
+
+                        Button {
+                            model.deleteCapture(item)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.plain)
+                        .help("删除")
                     }
                 }
             }

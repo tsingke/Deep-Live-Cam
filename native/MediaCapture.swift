@@ -80,7 +80,12 @@ final class MediaCapture {
 
     // MARK: - 录制
 
-    func start(image: CGImage, in directory: URL, withAudio: Bool = false) throws -> URL {
+    func start(
+        image: CGImage,
+        in directory: URL,
+        withAudio: Bool = false,
+        videoBitrate: Int = 8_000_000
+    ) throws -> URL {
         guard !recording else {
             return outputURL ?? directory.appendingPathComponent("LiveFace.mp4")
         }
@@ -114,7 +119,7 @@ final class MediaCapture {
             AVVideoWidthKey: width,
             AVVideoHeightKey: height,
             AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: 8_000_000,
+                AVVideoAverageBitRateKey: videoBitrate,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
                 AVVideoMaxKeyFrameIntervalKey: 60,
                 AVVideoExpectedSourceFrameRateKey: 30
