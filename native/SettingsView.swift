@@ -3,6 +3,7 @@ import AppKit
 
 enum SettingsTab: String, CaseIterable, Identifiable {
     case devices
+    case video
     case recording
     case head
     case status
@@ -12,6 +13,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .devices: return "设备"
+        case .video: return "画面"
         case .recording: return "录制"
         case .head: return "换头"
         case .status: return "状态与 OBS"
@@ -21,6 +23,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .devices: return "camera"
+        case .video: return "slider.horizontal.3"
         case .recording: return "record.circle"
         case .head: return "person.crop.circle"
         case .status: return "waveform.path.ecg"
@@ -36,6 +39,8 @@ final class SettingsState: ObservableObject {
             tab = .head
         } else if ProcessInfo.processInfo.arguments.contains("--settings-recording") {
             tab = .recording
+        } else if ProcessInfo.processInfo.arguments.contains("--settings-video") {
+            tab = .video
         }
     }
 }
@@ -106,6 +111,8 @@ struct SettingsView: View {
         switch state.tab {
         case .devices:
             devicesView
+        case .video:
+            videoView
         case .recording:
             recordingView
         case .head:
@@ -167,6 +174,116 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
+    // MARK: - 画面
+
+    private var videoView: some View {
+        Form {
+            Section("采集") {
+                Picker("分辨率", selection: Binding(
+                    get: { model.captureResolution },
+                    set: { model.setCaptureResolution($0) }
+                )) {
+                    ForEach(CaptureResolution.allCases) { resolution in
+                        Text(resolution.title).tag(resolution)
+                    }
+                }
+                .disabled(model.isRunning)
+
+                LabeledContent("当前画面") {
+                    Text("\(Int(model.displayedSize.width))×\(Int(model.displayedSize.height))")
+                        .monospacedDigit()
+                }
+
+                if model.isRunning {
+                    Text("停止直播后可切换采集分辨率。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("画质") {
+                LabeledContent("发送画质") {
+                    Text("\(Int(model.qualityPct))%")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                Slider(value: $model.qualityPct, in: 50...95, step: 1)
+
+                LabeledContent("输出画质") {
+                    Text("\(model.serverJpegQuality)%")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                Slider(
+                    value: Binding(
+                        get: { Double(model.serverJpegQuality) },
+                        set: { model.setServerJpegQuality(Int($0.rounded())) }
+                    ),
+                    in: 50...95, step: 1
+                )
+
+                LabeledContent("清晰度增强") {
+                    Text("\(model.serverSharpen)%")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                Slider(
+                    value: Binding(
+                        get: { Double(model.serverSharpen) },
+                        set: { model.setServerSharpen(Int($0.rounded())) }
+                    ),
+                    in: 0...100, step: 5
+                )
+            }
+
+            Section("面部增强") {
+                Toggle("GPEN-BFR-256 面部增强", isOn: Binding(
+                    get: { model.faceEnhance },
+                    set: { model.setFaceEnhance($0) }
+                ))
+
+                if model.faceEnhance {
+                    if model.faceEnhanceReady {
+                        Text("增强模型已就绪")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    } else if let error = model.faceEnhanceError, !error.isEmpty {
+                        Text("增强模型加载失败：\(error)")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .lineLimit(2)
+                    } else {
+                        Text("增强模型准备中（首次下载约 75MB）")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                Text("换脸模型输出为 128×128；面部增强会显著提升清晰度，但会增加延迟、发热和内存占用。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("画质预设") {
+                HStack {
+                    Button("流畅优先") { model.applyQualityPreset(.smooth) }
+                    Button("均衡") { model.applyQualityPreset(.balanced) }
+                    Button("清晰优先") { model.applyQualityPreset(.clear) }
+                }
+                Text("清晰优先 = 1080p + 高画质 + 面部增强；首次启用需要下载并编译 GPEN 模型。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Text("更高分辨率/画质会增加延迟和发热；4K 对这台机器可能明显降帧。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
     // MARK: - 录制
 
     private var recordingView: some View {
@@ -193,6 +310,8 @@ struct SettingsView: View {
                     Text("4 Mbps").tag(4)
                     Text("8 Mbps").tag(8)
                     Text("12 Mbps").tag(12)
+                    Text("16 Mbps").tag(16)
+                    Text("32 Mbps").tag(32)
                 }
                 .disabled(model.isRecording)
 

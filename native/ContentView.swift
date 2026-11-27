@@ -260,7 +260,7 @@ private struct SidebarView: View {
     private var controlsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("同步与画质")
+                Text("直播设置")
                     .font(.system(size: 14, weight: .semibold))
                 Spacer()
                 Text(model.delayMs == 0 ? "低延迟" : "同步 +\(Int(model.delayMs)) ms")
@@ -284,18 +284,6 @@ private struct SidebarView: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            VStack(spacing: 7) {
-                HStack {
-                    Text("发送画质").font(.system(size: 12))
-                    Spacer()
-                    Text("\(Int(model.qualityPct))%")
-                        .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(Theme.cyan)
-                }
-                Slider(value: $model.qualityPct, in: 50...90, step: 1)
-                    .tint(Theme.accent)
-            }
 
             HStack {
                 Text("人脸检测间隔").font(.system(size: 12))
@@ -453,7 +441,9 @@ private struct PreviewPane: View {
                     )
                 )
 
-            Text(model.isRunning ? "1280×720 · 实时换脸中" : "摄像头未开启")
+            Text(model.isRunning
+                 ? "\(Int(model.displayedSize.width))×\(Int(model.displayedSize.height)) · 实时换脸中"
+                 : "摄像头未开启")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
 

@@ -5,6 +5,23 @@ import UniformTypeIdentifiers
 import QuartzCore
 import Foundation
 
+enum CaptureResolution: String, CaseIterable, Identifiable {
+    case p720 = "720p"
+    case p1080 = "1080p"
+    case p4k = "4K"
+
+    var id: String { rawValue }
+    var title: String { rawValue }
+
+    var preset: AVCaptureSession.Preset {
+        switch self {
+        case .p720: return .hd1280x720
+        case .p1080: return .hd1920x1080
+        case .p4k: return .hd4K3840x2160
+        }
+    }
+}
+
 /// 采集摄像头 → JPEG → 本地服务换脸 → 按固定延迟上屏。
 final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, ObservableObject {
     @Published private(set) var isRunning = false
@@ -27,6 +44,7 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
     private var demoTimer: Timer?
     private var lastPreviewAt: Double = 0
     private var selectedCameraID: String?
+    private var selectedResolution: CaptureResolution = .p720
 
     weak var backend: BackendClient?
     var onPreview: ((CGImage) -> Void)?
@@ -62,6 +80,21 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
         settingsLock.lock()
         defer { settingsLock.unlock() }
         return selectedCameraID
+    }
+
+    private var currentResolution: CaptureResolution {
+        settingsLock.lock()
+        defer { settingsLock.unlock() }
+        return selectedResolution
+    }
+
+    func setResolution(_ resolution: CaptureResolution) {
+        settingsLock.lock()
+        selectedResolution = resolution
+        settingsLock.unlock()
+        queue.async {
+            self.configured = false
+        }
     }
 
     func setCamera(id: String?) {
@@ -150,14 +183,17 @@ final class CameraController: NSObject, AVCaptureVideoDataOutputSampleBufferDele
                 for output in self.session.outputs {
                     self.session.removeOutput(output)
                 }
-                if self.session.canSetSessionPreset(.hd1280x720) {
+                let wantedPreset = self.currentResolution.preset
+                if self.session.canSetSessionPreset(wantedPreset) {
+                    self.session.sessionPreset = wantedPreset
+                } else if self.session.canSetSessionPreset(.hd1280x720) {
                     self.session.sessionPreset = .hd1280x720
                 } else {
                     self.session.sessionPreset = .high
                 }
 
-                let wanted = self.currentCameraID
-                let device = wanted.flatMap { AVCaptureDevice(uniqueID: $0) }
+                let wantedCamera = self.currentCameraID
+                let device = wantedCamera.flatMap { AVCaptureDevice(uniqueID: $0) }
                     ?? AVCaptureDevice.default(for: .video)
                 guard let device else {
                     self.session.commitConfiguration()

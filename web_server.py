@@ -94,13 +94,15 @@ g.nsfw_filter = False
 g.det_size = 640
 
 DEFAULT_DETECT_INTERVAL = 3
-DEFAULT_JPEG_QUALITY = 85
+DEFAULT_JPEG_QUALITY = 90
+DEFAULT_SHARPEN = 0
+DEFAULT_FACE_ENHANCE = False
 DEFAULT_HEAD_SWAP = False
 DEFAULT_HEAD_STRENGTH = 90   # 0..100
 DEFAULT_HEAD_SCALE = 100     # 85..115
 DEFAULT_HEAD_OFFSET_Y = 0    # -20..20 (% of target face height)
 DEFAULT_HEAD_OFFSET_X = 0    # -20..20 (% of target face width)
-MAX_FRAME_BYTES = 8 * 1024 * 1024
+MAX_FRAME_BYTES = 16 * 1024 * 1024
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_WORKERS = 2               # 同时处理的最大帧数
 # 处理槽之外只保留 1 个待处理帧；新帧到来时替换它（旧请求返回 204）。
@@ -212,6 +214,12 @@ class Engine:
 
         self.detect_interval = DEFAULT_DETECT_INTERVAL
         self.jpeg_quality = DEFAULT_JPEG_QUALITY
+        self.sharpen = DEFAULT_SHARPEN
+        self.face_enhance = DEFAULT_FACE_ENHANCE
+        self._enhancer = None
+        self._enhance_ready = False
+        self.enhance_error: Optional[str] = None
+        self._enhance_lock = threading.Lock()
         self.swap_count = 1  # 1/2/3 = 人数，0 = 全部
         self.head_swap = DEFAULT_HEAD_SWAP  # 实验性：换脸后叠加源头部/发型
         self.head_strength = DEFAULT_HEAD_STRENGTH
@@ -288,6 +296,8 @@ class Engine:
             # 提前加载 Vision 人像分割（换头用），避免用户第一次切到
             # 「换头」时卡在模型初始化上；失败则静默回退到 GrabCut。
             threading.Thread(target=self._warm_vision, daemon=True).start()
+            if self.face_enhance:
+                threading.Thread(target=self._prepare_enhancer, daemon=True).start()
 
             if self.sources:
                 self.start_swap_warmup()
@@ -501,6 +511,25 @@ class Engine:
             log.info("Vision 人像分割已预热")
         except Exception:
             pass
+
+    def _prepare_enhancer(self) -> None:
+        """Lazily download/compile GPEN-256; frames stay unenhanced until ready."""
+        if self._enhance_ready:
+            return
+        with self._enhance_lock:
+            if self._enhance_ready:
+                return
+            try:
+                from modules.processors.frame.face_enhancer_gpen256 import get_enhancer
+
+                self._enhancer = get_enhancer()
+                self._enhance_ready = self._enhancer is not None
+                self.enhance_error = None if self._enhance_ready else "增强模型加载失败"
+                log.info("面部增强模型已就绪（GPEN-BFR-256）")
+            except Exception as exc:
+                self._enhance_ready = False
+                self.enhance_error = str(exc)[:300]
+                log.exception("面部增强模型加载失败（将保留未增强的换脸结果）")
 
     def start_swap_warmup(self) -> None:
         if self._warm_started or self._swap_warmed:
@@ -785,6 +814,21 @@ class Engine:
                             )
                 except Exception:
                     log.exception("换头融合失败（本帧保留换脸结果）")
+        if self.face_enhance and self._enhance_ready and targets:
+            try:
+                from modules.processors.frame.face_enhancer_gpen256 import enhance_face
+
+                for target_face in targets:
+                    out = enhance_face(out, target_face)
+            except Exception:
+                log.exception("面部增强失败（本帧保留换脸结果）")
+        if self.sharpen > 0:
+            try:
+                amount = min(1.0, max(0.0, self.sharpen / 100.0))
+                blur = cv2.GaussianBlur(out, (0, 0), 1.0)
+                out = cv2.addWeighted(out, 1.0 + amount, blur, -amount, 0)
+            except Exception:
+                pass
         swap_ms = (time.perf_counter() - t_swap0) * 1000
 
         t_enc = time.perf_counter()
@@ -991,6 +1035,10 @@ async def api_state(request) -> Any:
         "settings": {
             "detect_interval": eng.detect_interval,
             "jpeg_quality": eng.jpeg_quality,
+            "sharpen": eng.sharpen,
+            "face_enhance": bool(eng.face_enhance),
+            "face_enhance_ready": bool(eng._enhance_ready),
+            "face_enhance_error": eng.enhance_error,
             "swap_count": eng.swap_count,
             "head_swap": bool(eng.head_swap),
             "head_strength": eng.head_strength,
@@ -1101,6 +1149,18 @@ async def api_config(request) -> Any:
             eng.jpeg_quality = max(50, min(95, int(body["jpeg_quality"])))
         except Exception:
             pass
+    if "sharpen" in body:
+        try:
+            eng.sharpen = max(0, min(100, int(body["sharpen"])))
+        except Exception:
+            pass
+    if "face_enhance" in body:
+        try:
+            eng.face_enhance = bool(body["face_enhance"])
+            if eng.face_enhance and not eng._enhance_ready:
+                threading.Thread(target=eng._prepare_enhancer, daemon=True).start()
+        except Exception:
+            pass
     if "swap_count" in body:
         try:
             value = int(body["swap_count"])
@@ -1149,6 +1209,8 @@ async def api_config(request) -> Any:
         {
             "detect_interval": eng.detect_interval,
             "jpeg_quality": eng.jpeg_quality,
+            "sharpen": eng.sharpen,
+            "face_enhance": bool(eng.face_enhance),
             "swap_count": eng.swap_count,
             "head_swap": bool(eng.head_swap),
             "head_strength": eng.head_strength,
@@ -1163,6 +1225,10 @@ async def api_config(request) -> Any:
             "ok": True,
             "detect_interval": eng.detect_interval,
             "jpeg_quality": eng.jpeg_quality,
+            "sharpen": eng.sharpen,
+            "face_enhance": bool(eng.face_enhance),
+            "face_enhance_ready": bool(eng._enhance_ready),
+            "face_enhance_error": eng.enhance_error,
             "swap_count": eng.swap_count,
             "head_swap": bool(eng.head_swap),
             "head_strength": eng.head_strength,
@@ -1336,6 +1402,8 @@ def create_app(idle_timeout: int = 7200) -> Any:
     cfg = load_config()
     eng.detect_interval = int(cfg.get("detect_interval", DEFAULT_DETECT_INTERVAL))
     eng.jpeg_quality = int(cfg.get("jpeg_quality", DEFAULT_JPEG_QUALITY))
+    eng.sharpen = max(0, min(100, int(cfg.get("sharpen", DEFAULT_SHARPEN))))
+    eng.face_enhance = bool(cfg.get("face_enhance", DEFAULT_FACE_ENHANCE))
     eng.swap_count = max(0, min(6, int(cfg.get("swap_count", 1))))
     eng.head_swap = bool(cfg.get("head_swap", DEFAULT_HEAD_SWAP))
     eng.head_strength = max(0, min(100, int(cfg.get("head_strength", DEFAULT_HEAD_STRENGTH))))

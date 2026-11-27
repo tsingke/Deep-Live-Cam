@@ -1,4 +1,4 @@
-# 实时换脸直播 · Live Face Studio（Deep-Live-Cam 增强版）
+# 实时换脸直播 · Live Face Studio
 
 <img src="assets/AppIcon.png" width="104" align="right" alt="LiveFace 图标">
 
@@ -13,12 +13,12 @@
 
 <p align="center"><sub>主界面 · 空白照片库（截图不含任何人物照片）</sub></p>
 
-<p align="center"><img src="docs/ui-settings.png" alt="LiveFace 设置窗口：设备、录制、换头微调、状态与 OBS" width="620"></p>
+<p align="center"><img src="docs/ui-settings.png" alt="LiveFace 设置窗口：画面画质、设备、录制、换头、状态与 OBS" width="620"></p>
 
-<p align="center"><sub>设置窗口：设备、录制、换头微调、状态与 OBS</sub></p>
+<p align="center"><sub>设置窗口：画面画质、设备、录制、换头、状态与 OBS</sub></p>
 
 顶部提供 **截图 / 录制 / 保存目录**；侧栏「模式」切换换脸/换头；
-右上角齿轮（或 `⌘,`）打开**设置**：设备、录制、换头微调、状态与 OBS。
+右上角齿轮（或 `⌘,`）打开**设置**：画面画质、设备、录制、换头、状态与 OBS。
 
 > 截图使用空白照片库与待机画面，不含任何人物照片或个人信息。
 
@@ -31,30 +31,13 @@
 
 Python 换脸服务由 App 在后台启动/复用，全程无终端、无浏览器。
 
-> 本仓库是 [hacksider/Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam) 的增强 fork：
-> 上游检测/换脸源码保留在根目录 `modules/`，本仓库新增原生 macOS App、实时后台、网页调试版与构建脚本。
-> 上游原有 GUI 仍可使用：`.venv/bin/python run.py`。
-
 ## 快速开始
 
-### 首次安装
+双击 **`LiveFace.app`**（项目根目录里；也已安装到 `~/Applications`，
+可在启动台 / Spotlight 搜 **LiveFace**）。
 
-```bash
-git clone https://github.com/tsingke/Deep-Live-Cam.git
-cd Deep-Live-Cam
-python3.12 -m venv .venv
-.venv/bin/pip install -r requirements.txt -r requirements-web.txt
-./make_app.sh --install
-```
-
-首次启动会自动下载模型到 `models/` 和 `~/.insightface/models/buffalo_l/`（约 1.1GB），
-并使用 CoreML 编译（1–3 分钟）。构建 App 需要 macOS 的 Command Line Tools。
-
-### 使用
-
-双击 **`LiveFace.app`**（项目根目录或 `~/Applications`，Spotlight 搜 **LiveFace**）。
-
-1. 首次启动会请求**摄像头权限**（请允许）。
+1. 首次启动 App 会请求**摄像头权限**（请允许），并显示「加载/编译 CoreML 模型」，通常 **1–3 分钟**；
+   编译结果由系统缓存，之后启动只需十几秒。
 2. 拖入或点击上传 1–9 张人像照片（自动提取人脸特征）。
 3. 点「开始直播」；按 **空格** 也可开始/停止。
 4. 点「输出窗口」，把弹出的纯净画面窗口留给 OBS 采集。
@@ -81,6 +64,14 @@ python3.12 -m venv .venv
 - 设置（齿轮 / `⌘,`）→「设备」可选择外接摄像头/麦克风；**停止直播/录制后**切换。
 - 未选择时使用系统默认设备；设备变化后可点「刷新」重新枚举。
 - 外接设备未显示时，确认已连接并在系统设置中允许 LiveFace 访问摄像头/麦克风。
+
+### 画质与分辨率
+- 设置 →「画面」：采集分辨率 **720p / 1080p / 4K**；发送画质 **50–95%**；输出画质 **50–95%**；清晰度增强 **0–100%**。
+- **面部增强（GPEN-BFR-256）**：可选；首次启用下载约 **75MB** 并编译，显著提升换脸面部清晰度，但会增加延迟、发热和内存占用。
+- 画质预设：**流畅优先 / 均衡 / 清晰优先**（1080p + 高画质 + 面部增强）。
+- 推荐：直播用 **1080p + 发送 90 / 输出 92**；追求清晰可开面部增强（测试约 5fps）；4K 更清晰但对 M3 Pro 压力明显。
+- 录制画质另可选 16/32 Mbps；更高分辨率/码率会增加文件大小和编码压力。
+- 换脸模型 inswapper 输出为 **128×128**；不开面部增强时，高分辨率主要改善整体画面，面部细节仍受模型限制。
 
 ### 换脸人数与锁定主角
 
@@ -162,6 +153,7 @@ OBS 设置：`麦克风 → 高级音频属性 → 同步偏移 = 与 App 中相
   3× 超采样，16–1024px 全尺寸。
 - 构建：
   - `./make_app.sh --install`（推荐）或 `./make_native_app.sh --install`
+  - `./make_web_launcher.sh`：构建旧的浏览器启动器 `LiveFace Web.app`
   - 只需 Command Line Tools（Swift 6.4 / macOS SDK），不需要安装 Xcode。
 - App 为本地 ad-hoc 签名；**移动项目目录后**重新执行 `./make_app.sh --install`
   以更新内嵌路径。
@@ -209,8 +201,8 @@ OBS 设置：`麦克风 → 高级音频属性 → 同步偏移 = 与 App 中相
 ## 文件结构
 
 ```
-tsingke/Deep-Live-Cam/
-├─ LiveFace.app               # 构建产物（不入库；./make_app.sh 生成）
+开源项目：直播换脸/
+├─ LiveFace.app               # 原生 App（已装 ~/Applications，Spotlight 可搜）
 ├─ native/                    # SwiftUI 源码
 │  ├─ LiveFaceApp.swift       # App 入口、菜单、快照
 │  ├─ ContentView.swift       # 原生界面
@@ -225,26 +217,30 @@ tsingke/Deep-Live-Cam/
 │  └─ main.swift              # AppKit 入口
 ├─ make_app.sh                # 构建原生 App（--install 安装到 ~/Applications）
 ├─ make_native_app.sh         # 原生构建细节
+├─ make_web_launcher.sh       # 旧浏览器启动器（LiveFace Web.app）
 ├─ assets/                    # AppIcon.png/.icns + make_icon.py
 ├─ docs/                      # README 截图与工作流程图
 ├─ web_server.py              # aiohttp 后台服务（2 处理槽、检测缓存、照片库、闲置退出）
 ├─ head_swap.py               # 换头：源头部遮罩 + 五点对齐融合
 ├─ web/                       # 网页版控制台（调试用，可选）
 ├─ start.command              # 浏览器调试入口
-├─ modules/                   # 上游 Deep-Live-Cam 源码（检测/换脸）
-├─ models/                    # 模型缓存（自动下载，不入库）
-├─ requirements.txt           # 上游 Python 依赖
+├─ Deep-Live-Cam/             # 克隆的上游项目（换脸模块）
+│  └─ models/inswapper_128_fp16.onnx
 ├─ photos/                    # 上传的照片 + library.json
 └─ logs/                      # server.log / native-app.log
 ```
 
-## 重新构建 App
+## 从零重建环境
 
 ```bash
-./make_app.sh --install
+git clone https://github.com/hacksider/Deep-Live-Cam.git
+python3.12 -m venv .venv
+.venv/bin/pip install -r Deep-Live-Cam/requirements.txt -r requirements-web.txt
+# 模型：启动服务会自动下载到 Deep-Live-Cam/models/ 和 ~/.insightface/models/buffalo_l/
+./make_app.sh --install   # 构建并安装原生 App（需要 Command Line Tools）
 ```
 
-移动项目目录后需要重新执行，以更新 App 内嵌路径。
+本次交付已经装好 Python 3.12 虚拟环境和模型，正常使用不需要再执行以上步骤。
 模型合计约 1.1GB（inswapper 2×265MB + buffalo_l 383MB），另需 1–2GB
 临时空间供 CoreML 首次编译。
 
@@ -284,12 +280,6 @@ tsingke/Deep-Live-Cam/
 实时换脸属于双重用途技术。请仅用于**本人形象、已获授权的人物**或明确标注的娱乐内容；
 不要用于冒充他人、诈骗、伪造证据或任何可能误导他人的场景。发布换脸内容时请遵守
 当地法律与平台规则。
-
-## 上游与许可
-
-本仓库基于 [hacksider/Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam)。
-上游代码、模型与许可证见根目录 `LICENSE`。新增的原生 App、实时后台与网页调试界面
-为本仓库的增强部分。
 
 ## 技术栈
 

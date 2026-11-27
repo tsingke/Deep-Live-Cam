@@ -115,6 +115,7 @@ class ServerApiSmoke(unittest.TestCase):
         response = self._post("/api/config", {
             "detect_interval": 99,
             "jpeg_quality": 1,
+            "sharpen": 999,
             "swap_count": 99,
             "head_swap": True,
             "head_strength": 999,
@@ -125,6 +126,7 @@ class ServerApiSmoke(unittest.TestCase):
         self.assertTrue(response["ok"])
         self.assertEqual(response["detect_interval"], 12)
         self.assertEqual(response["jpeg_quality"], 50)
+        self.assertEqual(response["sharpen"], 100)
         self.assertEqual(response["swap_count"], 6)
         self.assertEqual(response["head_strength"], 100)
         self.assertEqual(response["head_scale"], 85)

@@ -25,6 +25,13 @@ final class AppModel: ObservableObject {
     @Published var headScale = 100
     @Published var headOffsetY = 0
     @Published var headOffsetX = 0
+    @Published var captureResolution: CaptureResolution = .p720
+    @Published var displayedSize = CGSize(width: 1280, height: 720)
+    @Published var serverJpegQuality = 90
+    @Published var serverSharpen = 0
+    @Published var faceEnhance = false
+    @Published var faceEnhanceReady = false
+    @Published var faceEnhanceError: String?
     @Published var maxRecordingMinutes = 0 {
         didSet { UserDefaults.standard.set(maxRecordingMinutes, forKey: "lf_max_record_minutes") }
     }
@@ -73,7 +80,7 @@ final class AppModel: ObservableObject {
             camera.updateSettings(delayMs: delayMs, qualityPct: qualityPct)
         }
     }
-    @Published var qualityPct: Double = 72 {
+    @Published var qualityPct: Double = 85 {
         didSet {
             UserDefaults.standard.set(qualityPct, forKey: "lf_quality")
             camera.updateSettings(delayMs: delayMs, qualityPct: qualityPct)
@@ -95,6 +102,7 @@ final class AppModel: ObservableObject {
     private var toastWorkItem: DispatchWorkItem?
     private var headSwapDirty = false
     private var headParamsInitialized = false
+    private var serverQualityInitialized = false
     private let mediaCapture = MediaCapture()
     private let audioCapture = AudioCaptureController()
     private var startingRecording = false
@@ -125,9 +133,13 @@ final class AppModel: ObservableObject {
         if let saved = UserDefaults.standard.string(forKey: "lf_capture_dir"), !saved.isEmpty {
             captureDirectory = URL(fileURLWithPath: saved, isDirectory: true)
         }
+        if let raw = UserDefaults.standard.string(forKey: "lf_capture_resolution"),
+           let resolution = CaptureResolution(rawValue: raw) {
+            captureResolution = resolution
+        }
         recordCountdownSeconds = UserDefaults.standard.integer(forKey: "lf_record_countdown")
         let savedBitrate = UserDefaults.standard.integer(forKey: "lf_video_bitrate")
-        if [4, 8, 12].contains(savedBitrate) { videoBitrateMbps = savedBitrate }
+        if [4, 8, 12, 16, 32].contains(savedBitrate) { videoBitrateMbps = savedBitrate }
         if UserDefaults.standard.object(forKey: "lf_record_mic") != nil {
             recordMicrophone = UserDefaults.standard.bool(forKey: "lf_record_mic")
         }
@@ -153,6 +165,7 @@ final class AppModel: ObservableObject {
         selectedCameraID = UserDefaults.standard.string(forKey: "lf_camera_id") ?? ""
         selectedMicrophoneID = UserDefaults.standard.string(forKey: "lf_mic_id") ?? ""
         camera.setCamera(id: selectedCameraID.isEmpty ? nil : selectedCameraID)
+        camera.setResolution(captureResolution)
         audioCapture.setMicrophone(id: selectedMicrophoneID.isEmpty ? nil : selectedMicrophoneID)
         wireCamera()
         observeBackend()
@@ -222,6 +235,14 @@ final class AppModel: ObservableObject {
                     if let value = state.settings.head_offset_y { self.headOffsetY = value }
                     if let value = state.settings.head_offset_x { self.headOffsetX = value }
                 }
+                if !self.serverQualityInitialized {
+                    self.serverQualityInitialized = true
+                    self.serverJpegQuality = state.settings.jpeg_quality
+                    if let value = state.settings.sharpen { self.serverSharpen = value }
+                    if let value = state.settings.face_enhance { self.faceEnhance = value }
+                }
+                self.faceEnhanceReady = state.settings.face_enhance_ready ?? false
+                self.faceEnhanceError = state.settings.face_enhance_error
                 if state.ready, self.pendingStart {
                     self.pendingStart = false
                     self.startCamera()
@@ -307,6 +328,7 @@ final class AppModel: ObservableObject {
         camera.onDisplay = { [weak self] image, capture in
             guard let self else { return }
             self.displayedImage = image
+            self.displayedSize = CGSize(width: image.width, height: image.height)
             self.outputController?.update(image)
             let now = CACurrentMediaTime()
             if self.isRecording {
@@ -501,6 +523,89 @@ final class AppModel: ObservableObject {
         guard v != headOffsetX else { return }
         headOffsetX = v
         backend.setHeadParameters(offsetX: v)
+    }
+
+    func setCaptureResolution(_ resolution: CaptureResolution) {
+        guard resolution != captureResolution else { return }
+        captureResolution = resolution
+        camera.setResolution(resolution)
+        UserDefaults.standard.set(resolution.rawValue, forKey: "lf_capture_resolution")
+        flash(isRunning
+              ? "采集分辨率将在下次直播生效：\(resolution.title)"
+              : "采集分辨率：\(resolution.title)")
+    }
+
+    func setServerJpegQuality(_ value: Int) {
+        let v = min(95, max(50, value))
+        guard v != serverJpegQuality else { return }
+        serverJpegQuality = v
+        backend.setJpegQuality(v)
+    }
+
+    func setServerSharpen(_ value: Int) {
+        let v = min(100, max(0, value))
+        guard v != serverSharpen else { return }
+        serverSharpen = v
+        backend.setSharpen(v)
+    }
+
+    func setFaceEnhance(_ enabled: Bool) {
+        guard enabled != faceEnhance else { return }
+        faceEnhance = enabled
+        faceEnhanceError = nil
+        backend.setFaceEnhance(enabled)
+        flash(enabled
+              ? "面部增强已开启；首次会下载/编译 GPEN 模型，请稍候"
+              : "面部增强已关闭")
+    }
+
+    enum QualityPreset {
+        case smooth
+        case balanced
+        case clear
+    }
+
+    func applyQualityPreset(_ preset: QualityPreset) {
+        let resolution: CaptureResolution
+        let send: Double
+        let server: Int
+        let sharpen: Int
+        let enhance: Bool
+        let bitrate: Int
+        let name: String
+        switch preset {
+        case .smooth:
+            resolution = .p720
+            send = 75
+            server = 85
+            sharpen = 0
+            enhance = false
+            bitrate = 8
+            name = "流畅优先"
+        case .balanced:
+            resolution = .p1080
+            send = 85
+            server = 90
+            sharpen = 10
+            enhance = false
+            bitrate = 16
+            name = "均衡"
+        case .clear:
+            resolution = .p1080
+            send = 92
+            server = 93
+            sharpen = 25
+            enhance = true
+            bitrate = 32
+            name = "清晰优先"
+        }
+        setCaptureResolution(resolution)
+        qualityPct = send
+        setServerJpegQuality(server)
+        setServerSharpen(sharpen)
+        setFaceEnhance(enhance)
+        videoBitrateMbps = bitrate
+        flash("画质预设：\(name)")
     }
 
     func applyHeadPreset(_ preset: HeadPreset) {

@@ -21,6 +21,10 @@ struct ServerSettings: Codable {
     var head_scale: Int?
     var head_offset_y: Int?
     var head_offset_x: Int?
+    var sharpen: Int?
+    var face_enhance: Bool?
+    var face_enhance_ready: Bool?
+    var face_enhance_error: String?
 }
 
 struct WarmupInfo: Codable {

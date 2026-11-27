@@ -270,6 +270,18 @@ final class BackendClient: ObservableObject {
         postJSON("api/config", ["head_swap": value])
     }
 
+    func setJpegQuality(_ value: Int) {
+        postJSON("api/config", ["jpeg_quality": value])
+    }
+
+    func setSharpen(_ value: Int) {
+        postJSON("api/config", ["sharpen": value])
+    }
+
+    func setFaceEnhance(_ value: Bool) {
+        postJSON("api/config", ["face_enhance": value])
+    }
+
     func setHeadParameters(
         strength: Int? = nil,
         scale: Int? = nil,
