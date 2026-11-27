@@ -388,6 +388,24 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("快捷键") {
+                shortcut("空格", "开始 / 停止直播")
+                shortcut("1–9", "切换照片")
+                shortcut("⌘S", "截图")
+                shortcut("⌘R", "开始 / 停止录制")
+                shortcut("⌘⇧O", "打开输出窗口")
+                shortcut("⌘,", "打开设置")
+                shortcut("F / Esc", "输出窗口全屏 / 关闭")
+            }
+
+            Section("维护") {
+                Button("打开日志目录") { model.openLogs() }
+                Button("重置窗口位置") { model.resetWindowFrames() }
+                Text("重置后下次启动恢复默认窗口位置。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("OBS 采集") {
                 Text("1. 点「输出窗口」，把弹出的窗口拖到合适大小。")
                 Text("2. OBS 添加「窗口采集」，选择「实时换脸输出」。")
@@ -398,6 +416,16 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func shortcut(_ key: String, _ action: String) -> some View {
+        HStack {
+            Text(action)
+            Spacer()
+            Text(key)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var breakdownText: String {

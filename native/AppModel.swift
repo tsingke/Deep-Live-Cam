@@ -583,6 +583,21 @@ final class AppModel: ObservableObject {
         NSWorkspace.shared.open(captureDirectory)
     }
 
+    func openLogs() {
+        let dir = URL(fileURLWithPath: backend.projectPath)
+            .appendingPathComponent("logs", isDirectory: true)
+        try? FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true
+        )
+        NSWorkspace.shared.open(dir)
+    }
+
+    func resetWindowFrames() {
+        UserDefaults.standard.removeObject(forKey: "lf_main_frame")
+        UserDefaults.standard.removeObject(forKey: "lf_output_frame")
+        flash("窗口位置已重置，下次启动恢复默认")
+    }
+
     func refreshRecentCaptures() {
         let fm = FileManager.default
         guard let urls = try? fm.contentsOfDirectory(
